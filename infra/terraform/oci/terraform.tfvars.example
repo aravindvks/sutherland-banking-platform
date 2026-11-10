@@ -2,7 +2,12 @@
 compartment_id    = "ocid1.compartment.oc1..xxxx"
 env               = "dev"
 node_image_id     = "ocid1.image.oc1.uk-london-1.xxxx" # Oracle Linux OKE image for kubernetes_version
+tenancy_ocid      = "ocid1.tenancy.oc1..xxxx"
 postgres_password = "set-me-from-a-password-manager"
+webhook_secret    = "set-me-from-a-password-manager"
+streaming_user    = "<tenancy name>/<user name>"       # the services' Streaming user (in group streaming_group)
+streaming_auth_token = "set-me-from-a-password-manager" # an auth token of streaming_user
+# modules = ["onboarding", "payments", "compliance", "recon"]  # a bank without cards: no EHI WAF
 # thredd_ehi_source_cidrs = ["x.x.x.x/32"]           # from Thredd onboarding
 # bff_backend_url         = "http://<ingress LB private IP>"  # after the first Helm deploy
 # ehi_load_balancer_id    = "ocid1.loadbalancer.oc1..."       # after the first Helm deploy

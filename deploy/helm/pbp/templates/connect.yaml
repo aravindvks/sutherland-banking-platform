@@ -27,12 +27,21 @@ spec:
               value: {{ .Values.config.KAFKA_BOOTSTRAP | quote }}
             - name: GROUP_ID
               value: pbp-connect
+            {{- with .Values.connect.ociConnectHarnessId }}
+            - name: CONFIG_STORAGE_TOPIC
+              value: {{ printf "%s-config" . | quote }}
+            - name: OFFSET_STORAGE_TOPIC
+              value: {{ printf "%s-offset" . | quote }}
+            - name: STATUS_STORAGE_TOPIC
+              value: {{ printf "%s-status" . | quote }}
+            {{- else }}
             - name: CONFIG_STORAGE_TOPIC
               value: pbp-connect-configs
             - name: OFFSET_STORAGE_TOPIC
               value: pbp-connect-offsets
             - name: STATUS_STORAGE_TOPIC
               value: pbp-connect-statuses
+            {{- end }}
             - name: CONNECT_SECURITY_PROTOCOL
               value: {{ .Values.config.SPRING_KAFKA_PROPERTIES_SECURITY_PROTOCOL | default "SASL_SSL" | quote }}
             - name: CONNECT_SASL_MECHANISM

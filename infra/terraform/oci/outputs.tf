@@ -36,3 +36,8 @@ output "vault_id" {
 output "apm_data_upload_endpoint" {
   value = oci_apm_apm_domain.apm.data_upload_endpoint
 }
+
+output "connect_harness_id" {
+  description = "Kafka Connect storage for the outbox relay: Helm value connect.ociConnectHarnessId."
+  value       = oci_streaming_connect_harness.connect.id
+}
