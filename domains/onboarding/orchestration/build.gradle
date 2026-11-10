@@ -1,0 +1,5 @@
+// The onboarding domain's sagas and their HTTP and Kafka entry points; assembled into services/orchestrator.
+dependencies {
+    // The Atfinity webhook listener here starts the compliance freeze saga on a rescreening hit.
+    implementation project(':domains:compliance-orchestration')
+}

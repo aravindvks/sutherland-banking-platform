@@ -51,6 +51,22 @@ subprojects { sub ->
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
 
+    // A domain's orchestration module (domains/<domain>/orchestration): a library of that domain's sagas, listeners
+    // and controllers, assembled by services/orchestrator. Domain-to-domain dependencies are declared per module.
+    if (sub.path.startsWith(':domains:') && sub.name.endsWith('-orchestration')) {
+        apply plugin: 'java-library'
+
+        dependencies {
+            api project(':libs:orchestration-core')
+            implementation 'org.springframework.boot:spring-boot-starter-validation'
+            implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+            implementation 'org.springframework.kafka:spring-kafka'
+            implementation 'io.micrometer:micrometer-core'
+            testImplementation "io.temporal:temporal-testing:${rootProject.temporalVersion}"
+            testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        }
+    }
+
     // Services and simulators are runnable Spring Boot apps.
     if (sub.path.startsWith(':services:') || sub.path.startsWith(':simulators:')) {
         apply plugin: 'org.springframework.boot'

@@ -192,8 +192,13 @@ linked to the new bank customer when onboarding completes. Running the BFF from 
 
 ```
 libs/platform-common      correlation IDs, problem+json errors, event envelope, Kafka publisher
+libs/orchestration-core   Temporal task queues, worker registration, HTTP clients and activity rules shared by the sagas
+domains/<domain>/orchestration  one module per business domain: onboarding, payments (with schedules and
+                          Direct Debits), cards, creditcards, compliance. Each holds that domain's sagas, listeners and
+                          controllers and registers its own Temporal workers
 services/bff              POST /v1/payments → payment-commands (Idempotency-Key, 202 Accepted)
-services/orchestrator     Temporal payment saga (task queue "payments"), Kafka command listener
+services/orchestrator     the one deployable that assembles the domain modules: one Temporal worker per task queue,
+                          Flyway migrations, flow metrics. tests/DomainBoundariesTest says which domain may use which
 services/mapping-service  master customer ID ↔ Atfinity / Essence / Thredd IDs, audit, mapping-events
 services/ehi-responder    POST /ehi/v1/messages: card → customer → status → Essence balance → decision
 services/essence-adapter  balance (standard and EHI lanes), same-bank transfer
