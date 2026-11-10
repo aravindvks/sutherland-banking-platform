@@ -35,8 +35,11 @@ Validated in CI (`terraform validate`, `helm lint`, `kubeconform`) but not yet a
 2. **Cluster add-ons** (once per cluster): Temporal (official Temporal Helm chart, namespace `temporal`,
    persistence on the same PostgreSQL), External Secrets Operator with an OCI Vault `ClusterSecretStore`,
    and the `ocir` image pull secret and `ehi-tls` certificate secret.
-3. **Secrets in Vault**: `pbp-<env>-db-user`, `-db-password`, `-webhook-secret`,
-   `-spring-kafka-properties-sasl-jaas-config` (OCI Streaming auth token).
+3. **Secrets in Vault**: Terraform creates `pbp-<env>-db-user`, `-db-password`, `-webhook-secret` and
+   `-spring-kafka-properties-sasl-jaas-config` (from `streaming_user` and `streaming_auth_token`), the dynamic group
+   and policy that let External Secrets read them, a PostgreSQL configuration with `wal_level=logical`, and the
+   Kafka Connect configuration (`connect_harness_id` → Helm `connect.ociConnectHarnessId`). Provisioning steps:
+   `docs/runbooks/`.
 4. **Release**: run the `deploy` workflow (Actions → deploy → environment). It builds and tests, pushes all
    images to OCIR tagged with the commit, and runs `helm upgrade --install pbp-<env>`.
 5. **After the first deploy**: set `bff_backend_url` (the web app's private load balancer) and
@@ -65,8 +68,9 @@ Deploy: `terraform apply` in the cloud's folder, copy the outputs into `deploy/h
 then `helm upgrade --install pbp-dev deploy/helm/pbp -f deploy/helm/pbp/values-<cloud>.yaml`. CI validates all
 three modules and renders the chart for each cloud; none has been applied yet.
 
-Open points: the deploy workflow still pushes to OCIR only; the outbox connector is registered by hand on a
-cluster (as `infra/compose/register-outbox-connector.sh` does locally); the service user needs `REPLICATION`
+Open points: the deploy workflow still pushes to OCIR only; the outbox connector is registered by a Helm hook Job
+after every install or upgrade (`templates/connect-register.yaml`, the same settings as
+`infra/compose/register-outbox-connector.sh` locally); the service user needs `REPLICATION`
 on RDS and Flexible Server; login stays on Keycloak (brokering to Cognito or Entra ID) so the web app is
 unchanged, and the BFF can read Cognito or Entra ID tokens directly with `PBP_AUTH_ROLES_CLAIM`.
 

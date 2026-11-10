@@ -125,6 +125,13 @@ kafkaTopics:
 connect:
   enabled: true
   image: quay.io/debezium/connect:2.7.3.Final
+  # OCI: the Streaming Connect configuration's OCID (terraform output connect_harness_id). Kafka Connect then keeps its
+  # state in "<OCID>-config", "-offset" and "-status". Empty (AWS, Azure, local): pbp-connect-configs, -offsets, -statuses.
+  ociConnectHarnessId: ""
+  # Registers the Debezium outbox connector after every install or upgrade (a Helm hook Job), so no manual step.
+  registerOutbox: true
+  registerImage: curlimages/curl:8.10.1
+  outboxTables: bff.outbox,orchestration.outbox,mapping.outbox,ehi.outbox
 
 # Observability (LLD section 15). Needs kube-prometheus-stack (with the Grafana dashboard sidecar), Tempo,
 # Loki and the OpenTelemetry Collector in the "observability" namespace; the collector exports to Tempo and,

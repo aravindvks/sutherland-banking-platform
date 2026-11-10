@@ -82,7 +82,7 @@ variable "services" {
   type        = list(string)
   default = [
     "bff", "orchestrator", "mapping-service", "ehi-responder", "essence-adapter", "thredd-adapter",
-    "atfinity-adapter", "recon-service", "vendor-simulator", "web",
+    "atfinity-adapter", "credit-adapter", "recon-service", "vendor-simulator", "web",
   ]
 }
 
@@ -103,4 +103,38 @@ variable "topics" {
     "onboarding-events"   = { partitions = 6, retention = 168 }
     "mapping-events"      = { partitions = 6, retention = 168 }
   }
+}
+
+variable "tenancy_ocid" {
+  description = "Tenancy OCID. Dynamic groups live at the tenancy level (the External Secrets Operator's access to Vault)."
+  type        = string
+}
+
+variable "modules" {
+  description = "The bank's modules, the same list as Helm's modules. Without cards and creditcards nothing is created for Thredd's EHI."
+  type        = list(string)
+  default     = ["onboarding", "payments", "compliance", "cards", "creditcards", "recon"]
+}
+
+variable "webhook_secret" {
+  description = "HMAC secret for vendor webhooks (LLD section 12). Stored in Vault; never commit it."
+  type        = string
+  sensitive   = true
+}
+
+variable "streaming_user" {
+  description = "The OCI user the services log in to Streaming as, as <tenancy name>/<user name> (or <tenancy name>/<domain>/<user name>)."
+  type        = string
+}
+
+variable "streaming_auth_token" {
+  description = "An auth token of streaming_user (Identity → Users → Auth tokens). Stored in Vault; never commit it."
+  type        = string
+  sensitive   = true
+}
+
+variable "streaming_group" {
+  description = "IAM group that streaming_user belongs to; it is allowed to use the stream pool."
+  type        = string
+  default     = "pbp-streaming"
 }
