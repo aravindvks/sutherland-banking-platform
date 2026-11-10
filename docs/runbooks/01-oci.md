@@ -7,7 +7,7 @@
 - **Tenancy and region**: UK South (London), `uk-london-1`, for UK customers. For Saudi Arabia (Riyadh, Jeddah) and the UAE (Dubai, Abu Dhabi), see section 12.
 - **Compartment**: one per environment, ideally inside a CIS Landing Zone. All resources below go in it.
 - **Access**: a group with permission to manage networking, OKE, PostgreSQL, Streaming, Cache, Vault, Object Storage, OCIR, API Gateway, WAF, Logging and APM in the compartment.
-- **Service limits**: check the compartment's limits for OKE nodes (3 × E4 Flex, 2 OCPU / 16 GB), PostgreSQL (2 OCPU / 32 GB, 2 instances), Streaming partitions (about 100, including dead-letter topics), Cache (3 nodes) and API Gateways.
+- **Service limits**: check the compartment's limits for OKE nodes (3 × E4 Flex, 2 OCPU / 16 GB each for dev and demo; 6, autoscaling to 12, for production: common runbook, section 3a), PostgreSQL (2 OCPU / 32 GB, 2 instances), Streaming partitions (about 100, including dead-letter topics), Cache (3 nodes) and API Gateways.
 - **Tools on the operator's machine**: OCI CLI, `kubectl`, `helm`, Terraform 1.6+ (for the Terraform path).
 - **Decisions** from the common runbook, section 2: environment name, modules, network range (default `10.20.0.0/16`).
 
@@ -41,7 +41,8 @@ Write down: the reserved IP (manifest: vendors' allow-lists).
 | Create | Setting | Terraform |
 | --- | --- | --- |
 | Cluster `pbp-<env>` | Enhanced cluster; Kubernetes 1.30; API endpoint in `oke-api`, **no public IP**; service load balancers in `public` | `oci_containerengine_cluster.oke` |
-| Node pool `pbp-<env>-workers` | VM.Standard.E4.Flex, 2 OCPU, 16 GB; Oracle Linux OKE image for the region and version; **3 nodes**, placed across every availability domain (or fault domain) in `workers` | `oci_containerengine_node_pool.workers` |
+| Node pool `pbp-<env>-workers` | VM.Standard.E4.Flex, 2 OCPU (4 vCPU), 16 GB; Oracle Linux OKE image for the region and version; **3 nodes** for dev and demo, **6** for production (`node_count`), placed across every availability domain (or fault domain) in `workers` | `oci_containerengine_node_pool.workers` |
+| Cluster autoscaler (production) | OKE cluster autoscaler add-on, node pool between 6 and 12 nodes | — |
 
 Reach the private API endpoint through the OCI Bastion service or a VPN, then `oci ce cluster create-kubeconfig`. The deploy workflow needs this kubeconfig, base64-encoded (`KUBECONFIG_B64`), and a runner that can reach the endpoint.
 
