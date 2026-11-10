@@ -122,6 +122,7 @@ async function request<T>(path: string, init: RequestInit = {}, customerId?: str
 }
 
 export const api = {
+  modules: () => request<{ modules: string[] }>('/v1/modules'),
   me: (customerId?: string) => request<Me>('/v1/me', {}, customerId),
   payments: (customerId: string) => request<Payment[]>('/v1/payments', {}, customerId),
   payment: (paymentId: string) => request<Payment>(`/v1/payments/${paymentId}`),

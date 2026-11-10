@@ -142,6 +142,29 @@ The checks are grouped by domain, one file each in `scripts/smoke/`: onboarding,
 31. Metrics, alerts and logs: Prometheus scrapes all 10 services, payment and card flow metrics are recorded, the alert rules are loaded, and Loki finds the payment's log lines by correlation ID
 32. Login: no token → 401; customer on the staff API → 403; view-only staff cannot run reconciliation; Asha's login linked at sign-up
 
+## Module switches (plug and play)
+
+A bank gets only the modules it runs. One list decides it, in the build, the deployment and the screens:
+
+| Module | Can be left out | What leaving it out removes |
+| --- | --- | --- |
+| onboarding, payments, compliance | No: every bank opens accounts, moves money and screens customers | |
+| cards | Yes | Debit card screen and controls, their BFF routes and the card-controls saga (onboarding still issues the card) |
+| creditcards | Yes | Credit card screens, routes, sagas, the Control Room's underwriting panel and the credit-adapter deployment |
+| recon | Yes | The reconciliation panel and routes, and the recon-service deployment |
+
+```
+PBP_MODULES=onboarding,payments,compliance,cards,recon make up      # local stack without credit cards ("Bank A")
+./gradlew bootJar -Pmodules=onboarding,payments,compliance,cards,recon
+helm upgrade --install ... --set 'modules={onboarding,payments,compliance,cards,recon}'
+```
+
+The deploy workflow takes the list as an input and uses it for both the jars and Helm. A module left out is not in
+the jars at all: its routes answer 404 and its workflows are never registered. The BFF and the orchestrator list
+what they run at `GET /v1/modules`; the web app reads the BFF's list and shows only those tabs, Control Room panels
+and demo buttons. The database schema is the same for every bank (a left-out module's tables stay empty). CI builds
+and tests two sets on every change: every module, and Bank A without credit cards.
+
 ## Observability (LLD section 15)
 
 One standard, set once in `libs/platform-common`, so no service wires it itself:

@@ -9,6 +9,26 @@ ext {
     temporalVersion = '1.25.1'
 }
 
+// Module switches (phase A, step 4). The apps assemble only the modules chosen here:
+//   ./gradlew bootJar -Pmodules=onboarding,payments,compliance,cards,recon     (or PBP_MODULES in the environment)
+// Default: every module. Onboarding, payments and compliance are always on (every bank opens accounts, moves money
+// and screens customers); cards, creditcards and recon can be left out.
+ext.allModules = ['onboarding', 'payments', 'compliance', 'cards', 'creditcards', 'recon']
+ext.requiredModules = ['onboarding', 'payments', 'compliance']
+ext.enabledModules = {
+    String chosen = findProperty('modules') ?: System.getenv('PBP_MODULES') ?: allModules.join(',')
+    List<String> list = chosen.split(',')*.trim().findAll { it }
+    List<String> unknown = list - allModules
+    if (unknown) {
+        throw new GradleException("Unknown module(s) ${unknown}. Modules: ${allModules.join(', ')}")
+    }
+    List<String> missing = requiredModules - list
+    if (missing) {
+        throw new GradleException("Module(s) ${missing} are always on; add them to the list")
+    }
+    allModules.findAll { it in list }
+}()
+
 allprojects {
     group = 'bank.pbp'
     version = '0.1.0-SNAPSHOT'

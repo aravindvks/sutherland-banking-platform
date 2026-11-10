@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, auth, authHeaders, gbp, toDate } from '../shared/api';
 import { dashboardUrl, journeyUrl } from '../shared/observability';
+import { has, toModules, type Modules } from '../shared/modules';
 
 /** A correlation ID that opens its journey in Grafana when VITE_GRAFANA_URL is set; plain text otherwise. */
 function Cid({ id }: { id?: string | null }) {
@@ -37,6 +38,12 @@ export default function Staff({ notify }: { notify: (m: string) => void }) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState<Row[]>([]);
   const [exceptions, setExceptions] = useState<Row[]>([]);
+  // Which modules this bank runs: only their panels (credit cards and reconciliation can be switched off).
+  const [modules, setModules] = useState<Modules>(null);
+  useEffect(() => {
+    staffFetch<{ modules: string[] }>('/v1/modules', staff).then((b) => setModules(toModules(b))).catch(() => setModules(null));
+  }, [staff]);
+  const recon = has(modules, 'recon');
 
   const refresh = useCallback(async () => {
     try {
@@ -46,16 +53,18 @@ export default function Staff({ notify }: { notify: (m: string) => void }) {
       ]);
       setQueue(q);
       setSagas(s);
-      const [r, x] = await Promise.all([
-        staffFetch<Row[]>('/v1/staff/recon/runs', staff),
-        staffFetch<Row[]>('/v1/staff/recon/exceptions', staff),
-      ]);
-      setRuns(r);
-      setExceptions(x);
+      if (recon) {
+        const [r, x] = await Promise.all([
+          staffFetch<Row[]>('/v1/staff/recon/runs', staff),
+          staffFetch<Row[]>('/v1/staff/recon/exceptions', staff),
+        ]);
+        setRuns(r);
+        setExceptions(x);
+      }
     } catch (err) {
       notify(err instanceof ApiError ? err.message : 'Cannot reach the bank');
     }
-  }, [staff, notify]);
+  }, [staff, notify, recon]);
 
   useEffect(() => {
     refresh();
@@ -209,6 +218,7 @@ export default function Staff({ notify }: { notify: (m: string) => void }) {
         )}
       </section>
 
+      {has(modules, 'creditcards') && (
       <section className="panel stack">
         <div className="row between"><h2>Credit card applications to underwrite</h2><span className="pill p-n">{referrals.length} waiting</span></div>
         {!referrals.length ? <p className="muted">None. The decision engine refers applications over £5,000 (apply in the customer app's Credit card tab).</p> : (
@@ -247,6 +257,7 @@ export default function Staff({ notify }: { notify: (m: string) => void }) {
           ))}
         </>}
       </section>
+      )}
 
       <div className="grid2">
         <section className="panel stack">
@@ -270,6 +281,7 @@ export default function Staff({ notify }: { notify: (m: string) => void }) {
         </section>
       </div>
 
+      {recon && (
       <section className="panel stack">
         <div className="row between">
           <h2>Reconciliation</h2>
@@ -303,6 +315,7 @@ export default function Staff({ notify }: { notify: (m: string) => void }) {
           </>
         )}
       </section>
+      )}
 
       <form className="panel stack" onSubmit={find}>
         <h2>Find a journey</h2>

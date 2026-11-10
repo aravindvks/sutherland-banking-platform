@@ -43,4 +43,25 @@ if [ "$AUTH" = 1 ]; then
   echo "$me" | grep -q "\"customerId\":\"$ASHA\"" && pass "Login 'asha' was linked to her customer when sign-up completed" \
     || fail "Login asha not linked to $ASHA: $me"
 fi
+
+step "Modules: the BFF and the orchestrator run exactly the modules in this build"
+ORCH=${ORCH:-http://localhost:8081}
+want=${PBP_MODULES:-onboarding,payments,compliance,cards,creditcards,recon}
+bm=$(curl -sf "$BFF/v1/modules" -H "$PRIYA_H"); om=$(curl -sf "$ORCH/v1/modules")
+for m in onboarding payments compliance cards creditcards recon; do
+  on=0; case ",$want," in *",$m,"*) on=1 ;; esac
+  got=0; echo "$bm" | grep -q "\"$m\"" && got=1
+  [ "$got" = "$on" ] || fail "BFF module $m should be $([ "$on" = 1 ] && echo on || echo off) (PBP_MODULES=$want); /v1/modules says $bm"
+  if [ "$m" != recon ]; then  # reconciliation runs in recon-service, not in the orchestrator
+    got=0; echo "$om" | grep -q "\"$m\"" && got=1
+    [ "$got" = "$on" ] || fail "Orchestrator module $m should be $([ "$on" = 1 ] && echo on || echo off); /v1/modules says $om"
+  fi
+done
+pass "BFF $bm, orchestrator $om"
+case ",$want," in
+  *",creditcards,"*) ;;
+  *) code=$(curl -s -o /dev/null -w '%{http_code}' "$BFF/v1/credit-cards" -H "$PRIYA_H")
+     [ "$code" = 404 ] && pass "Credit cards switched off: no route for /v1/credit-cards (404)" \
+       || fail "Credit cards are off but /v1/credit-cards answered $code" ;;
+esac
 }

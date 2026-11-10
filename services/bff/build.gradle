@@ -2,12 +2,10 @@
 // live in its module under domains/<domain>/bff; this app adds login, the home screen, live push and the staff queue.
 dependencies {
     implementation project(':libs:bff-core')
-    implementation project(':domains:onboarding-bff')
-    implementation project(':domains:payments-bff')
-    implementation project(':domains:cards-bff')
-    implementation project(':domains:creditcards-bff')
-    implementation project(':domains:compliance-bff')
-    implementation project(':domains:recon-bff')
+    // Only the modules switched on for this build (rootProject.enabledModules).
+    rootProject.enabledModules.each { m ->
+        implementation project(":domains:${m}-bff")
+    }
 
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.springframework.kafka:spring-kafka'

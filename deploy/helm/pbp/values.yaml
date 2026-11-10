@@ -60,6 +60,12 @@ externalSecrets:
   vaultId: ""
   secretStore: oci-vault
 
+# Module switches (phase A of the Next Version Roadmap): the modules this bank runs. Keep it the same as the list the
+# images were built with (./gradlew -Pmodules=...); the deploy workflow passes one list to both. Without creditcards
+# the credit-adapter is not deployed; without recon, the recon-service. Onboarding, payments and compliance are
+# always on.
+modules: [onboarding, payments, compliance, cards, creditcards, recon]
+
 # Replicas, resources and scaling from LLD section 13.
 services:
   bff:              { port: 8080, min: 2, max: 6,  cpu: 500m, memory: 1Gi, scaleCpu: 70 }

@@ -3,6 +3,7 @@ import { api, auth, demo, gbp, ApiError, type CreditCards, type Mandate, type Me
 import { fmtDay, fmtSort } from './shared/format';
 import { dashboardUrl } from './shared/observability';
 import { Pill } from './shared/ui';
+import { has, toModules, type Modules } from './shared/modules';
 import { Welcome } from './modules/onboarding/Onboarding';
 import { PaymentDetail, PaymentList, Payments } from './modules/payments/Payments';
 import { CardView } from './modules/cards/CardView';
@@ -91,6 +92,11 @@ function Bank({ customerId, notify, onSignOut }: { customerId: string; notify: (
   const [credit, setCredit] = useState<CreditCards | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Which modules this bank runs: their tabs and demo buttons only.
+  const [modules, setModules] = useState<Modules>(null);
+  useEffect(() => { api.modules().then((b) => setModules(toModules(b))).catch(() => setModules(null)); }, []);
+  const tabs = (['home', 'payments', 'card', 'credit'] as Tab[])
+    .filter((t) => (t === 'card' ? has(modules, 'cards') : t === 'credit' ? has(modules, 'creditcards') : true));
 
   const refresh = useCallback(async () => {
     try {
@@ -143,7 +149,7 @@ function Bank({ customerId, notify, onSignOut }: { customerId: string; notify: (
   const frozen = me && me.status !== 'ACTIVE';
   return (
     <>
-      <DemoBar me={me} mandates={mandates} credit={credit} notify={notify} after={refresh} />
+      <DemoBar me={me} mandates={mandates} credit={credit} modules={modules} notify={notify} after={refresh} />
       <header className="hero">
         <div className="hero-inner">
           <div className="hero-top">
@@ -163,7 +169,7 @@ function Bank({ customerId, notify, onSignOut }: { customerId: string; notify: (
             </p>
           </div>
           <nav className="tabs" aria-label="Sections">
-            {(['home', 'payments', 'card', 'credit'] as Tab[]).map((t) => (
+            {tabs.map((t) => (
               <button key={t} aria-current={tab === t ? 'page' : undefined} onClick={() => { setTab(t); setSelected(null); }}>
                 {t === 'home' ? 'Overview' : t === 'payments' ? 'Payments' : t === 'card' ? 'Debit card' : 'Credit card'}
               </button>
@@ -225,7 +231,7 @@ function Home({ me, payments, open }: { me: Me; payments: Payment[]; open: (id: 
 // Demo toolbar (dev and demo environments only, LLD section 16)
 // ---------------------------------------------------------------------------------------------
 
-function DemoBar({ me, mandates, credit, notify, after }: { me: Me | null; mandates: Mandate[]; credit: CreditCards | null; notify: (m: string) => void; after: () => void }) {
+function DemoBar({ me, mandates, credit, modules, notify, after }: { me: Me | null; mandates: Mandate[]; credit: CreditCards | null; modules: Modules; notify: (m: string) => void; after: () => void }) {
   const cc = credit?.accounts.find((a) => a.status === 'ACTIVE' || a.status === 'ARREARS');
   const [merchant, setMerchant] = useState('3.50|Bean There Cafe|contactless');
   const run = async (fn: () => Promise<string>) => {
@@ -251,14 +257,14 @@ function DemoBar({ me, mandates, credit, notify, after }: { me: Me | null; manda
           const d = await demo.tap(me!.card!.token, amount, name, channel);
           return d.decision === 'APPROVE' ? `Approved ${gbp(amount)} at ${name} (${d.latencyMs} ms)` : `Declined: ${d.reason}`;
         })}>Tap card</button>
-        <button className="bbtn" disabled={!cc} onClick={() => run(async () => {
+        {has(modules, 'creditcards') && <><button className="bbtn" disabled={!cc} onClick={() => run(async () => {
           const d = await demo.tap(cc!.cardToken, amount, name, channel);
           return d.decision === 'APPROVE' ? `Credit card approved ${gbp(amount)} at ${name} (${d.latencyMs} ms)` : `Credit card declined: ${d.reason}`;
         })}>Tap credit card</button>
         <button className="bbtn" disabled={!cc} onClick={() => run(async () => {
           const s = await demo.creditStatement(cc!.accountId, 60);
           return `Thredd statement: ${gbp(s.balance)}, minimum ${gbp(s.minimumPayment)} due in 60 seconds (demo)`;
-        })}>Credit statement</button>
+        })}>Credit statement</button></>}
         <button className="bbtn" disabled={!me?.account} onClick={() => run(async () => {
           await demo.receive(me!.account!.accountId, '20.00');
           return 'Arjun sent you £20 by Faster Payment';

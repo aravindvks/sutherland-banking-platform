@@ -2,11 +2,10 @@
 // the domain modules under domains/; this app assembles them and starts one Temporal worker per task queue.
 dependencies {
     implementation project(':libs:orchestration-core')
-    implementation project(':domains:onboarding-orchestration')
-    implementation project(':domains:payments-orchestration')
-    implementation project(':domains:cards-orchestration')
-    implementation project(':domains:creditcards-orchestration')
-    implementation project(':domains:compliance-orchestration')
+    // Only the modules switched on for this build (rootProject.enabledModules); recon has no sagas here.
+    rootProject.enabledModules.findAll { it != 'recon' }.each { m ->
+        implementation project(":domains:${m}-orchestration")
+    }
 
     implementation "io.temporal:temporal-sdk:${rootProject.temporalVersion}"
     // Observability (LLD section 15): workflow and activity spans join the caller's trace.
