@@ -1,7 +1,7 @@
 # Sutherland Banking Platform — local stack.
 #   Infrastructure only:   docker compose -f infra/compose/docker-compose.yml up -d
 #   Everything:            make up   (builds the jars first, then starts the "apps" profile)
-name: pbp
+name: sbp   # "pbp" is the frozen prototype repo; a different name keeps containers and volumes apart
 
 services:
   postgres:

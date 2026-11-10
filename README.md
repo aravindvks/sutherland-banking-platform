@@ -1,5 +1,7 @@
 # Sutherland Banking Platform
 
+> **This repository is the platform's next version.** It began as a copy of `aravindvks/bank-prototype` (with its history), which is now frozen at the prototype: demo fixes only. New work happens here: feature modules (plug and play), cloud runbooks with one-click deploy, market packs for new regions, and disaster recovery. The local stack runs as the Compose project `sbp`, so its containers and volumes never mix with the prototype's `pbp`. Both use the same ports: run `make down` in one before `make up` in the other.
+
 A UK real-time web bank on Oracle Cloud Infrastructure that integrates three vendor sandboxes:
 
 | Vendor | Role | Our component |
