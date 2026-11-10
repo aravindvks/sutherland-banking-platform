@@ -89,6 +89,11 @@ jobs:
             done
             echo "Modules $set: chart renders the right services"
           done
+          grep -q "aws-load-balancer-type: external" rendered-aws.yaml && grep -q "kind: Ingress" rendered-aws.yaml \
+            && grep -q "name: kafka-topics" rendered-aws.yaml
+          grep -q "azure-load-balancer-internal" rendered-azure.yaml && ! grep -q "oci-load-balancer" rendered-azure.yaml
+          grep -q "kind: PrometheusRule" rendered-obs.yaml && grep -q "dashboard-pbp-payments" rendered-obs.yaml
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
           ./kubeconform -strict -summary -ignore-missing-schemas rendered.yaml rendered-demo.yaml rendered-obs.yaml rendered-aws.yaml rendered-azure.yaml rendered-modules-*.yaml 2>&1 | tee -a helm.log
       - name: Check alert rules and collector config
         run: |
