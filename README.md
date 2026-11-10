@@ -192,11 +192,15 @@ linked to the new bank customer when onboarding completes. Running the BFF from 
 
 ```
 libs/platform-common      correlation IDs, problem+json errors, event envelope, Kafka publisher
+libs/bff-core             who is calling (Caller) and Idempotency-Key handling, shared by the BFF routes
 libs/orchestration-core   Temporal task queues, worker registration, HTTP clients and activity rules shared by the sagas
 domains/<domain>/orchestration  one module per business domain: onboarding, payments (with schedules and
                           Direct Debits), cards, creditcards, compliance. Each holds that domain's sagas, listeners and
                           controllers and registers its own Temporal workers
-services/bff              POST /v1/payments → payment-commands (Idempotency-Key, 202 Accepted)
+domains/<domain>/bff      that domain's BFF routes for the customer app and the Control Room (onboarding, payments,
+                          cards, creditcards, compliance, recon)
+services/bff              the one entry point for both portals: assembles the domains' routes and adds login, the
+                          home screen (/v1/me), live push and the staff queue
 services/orchestrator     the one deployable that assembles the domain modules: one Temporal worker per task queue,
                           Flyway migrations, flow metrics. tests/DomainBoundariesTest says which domain may use which
 services/mapping-service  master customer ID ↔ Atfinity / Essence / Thredd IDs, audit, mapping-events
@@ -206,7 +210,9 @@ services/thredd-adapter   card issue (token only, PAN pattern guard)
 services/atfinity-adapter open KYC/KYB case
 services/recon-service    nightly run records (matching rules in Phase 2)
 simulators/vendor-simulator  Essence, Thredd and Atfinity stand-ins; signed webhooks; X-Sim-Scenario
-web/                      customer web app (React + Vite), served by nginx in Docker
+web/                      customer web app and Control Room (React + Vite), served by nginx in Docker; one folder
+                          per module in web/src/modules (onboarding, payments, cards, creditcards), shared pieces in
+                          web/src/shared
 infra/compose             Docker Compose, topic creation, service image
 services/credit-adapter   credit bureau and decision engine (vendor not chosen; simulator stand-in)
 infra/observability       OpenTelemetry Collector, Prometheus and alert rules, Tempo, Promtail, Grafana dashboards

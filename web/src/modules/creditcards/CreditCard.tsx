@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, gbp, ApiError, type CreditCards, type Me } from './api';
+import { api, gbp, ApiError, type CreditCards, type Me } from '../../shared/api';
 
 // Credit card on Thredd credit processing: apply, read the offer, accept, then use and repay it.
 // The limit and APR come from the decision engine; balance, available credit and statements from Thredd.

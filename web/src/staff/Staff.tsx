@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, auth, authHeaders, gbp, toDate } from './api';
-import { dashboardUrl, journeyUrl } from './observability';
+import { ApiError, auth, authHeaders, gbp, toDate } from '../shared/api';
+import { dashboardUrl, journeyUrl } from '../shared/observability';
 
 /** A correlation ID that opens its journey in Grafana when VITE_GRAFANA_URL is set; plain text otherwise. */
 function Cid({ id }: { id?: string | null }) {
