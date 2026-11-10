@@ -33,7 +33,7 @@ Each step has two paths: provision it your own way (console, CLI, the bank's own
 | # | Item | Why | Sizing for a dev or demo environment |
 | --- | --- | --- | --- |
 | 1 | Private network with four subnets (public, Kubernetes API, workers, data) | Only the load balancers are public | One /16; /24 per subnet |
-| 2 | Kubernetes cluster, private API endpoint | Runs every service, Temporal, Kafka Connect, the Grafana stack | 3 worker nodes across zones or fault domains, 2 vCPU / 16 GB each (minimum 3 for the EHI responder's spread) |
+| 2 | Kubernetes cluster, private API endpoint | Runs every service, Temporal, Kafka Connect, the Grafana stack | 3 worker nodes across zones or fault domains, **4 vCPU / 16 GB each** (minimum 3 for the EHI responder's spread); production: section 3a |
 | 3 | PostgreSQL 16, private, with logical replication | One database, a schema per service; logical replication is needed by the outbox relay | 2 vCPU / 32 GB, primary plus a read replica |
 | 4 | Kafka-compatible event service, private | Commands and events between services | 9 topics plus a dead-letter topic each (section 4) |
 | 5 | Redis-compatible cache, TLS | Card cache for authorisations | 3 nodes, 2 GB |
@@ -47,7 +47,29 @@ Each step has two paths: provision it your own way (console, CLI, the bank's own
 | 13 | Identity provider | Customer and staff login, roles `staff` and `compliance` | One application, two groups |
 | 14 | Monitoring (optional) | The cloud's logs and tracing, beside the in-cluster Grafana stack | As the bank prefers |
 
-Production sizing follows LLD v2 section 13 (replicas and resources per service); production also adds the in-country standby region (phase D, not yet written).
+Production also adds the in-country standby region (phase D, not yet written).
+
+## 3a. Sizing by environment
+
+The cluster runs the platform's own pods, Temporal, Kafka Connect and the Grafana stack. PostgreSQL, Kafka, Redis and identity are managed services outside it. What the pods ask for depends on the Helm values file:
+
+| Values file | Use for | Platform pods (minimum) | CPU requested | Memory requested |
+| --- | --- | --- | --- | --- |
+| `values-demo.yaml` sizing | dev, test, demo | 12 | about 3.6 vCPU | about 10 GB |
+| `values.yaml` (LLD v2 section 13) | production, pre-production | 22, plus the simulator if on | about 14.5 vCPU | about 29 GB |
+
+Add about 4 vCPU and 9 GB for Temporal (frontend, history, matching, worker, UI), Kafka Connect, the Grafana stack and the External Secrets Operator, and about 10% per node for Kubernetes itself. Production pods also scale out under load: at their maximum replicas the platform asks for about 40 vCPU.
+
+| Environment | Node pool | Why |
+| --- | --- | --- |
+| dev, test, demo | **3 nodes × 4 vCPU / 16 GB** (12 vCPU, 48 GB): OCI E4.Flex 2 OCPU / 16 GB, AWS m6i.xlarge, Azure Standard_D4s_v5 (the Terraform defaults) | Demo sizing plus add-ons is about 8 vCPU and 19 GB, with room for rolling updates |
+| production | **6 nodes × 4 vCPU / 16 GB to start** (24 vCPU, 96 GB), across 3 zones, with the cluster autoscaler allowed to 12 | Production sizing plus add-ons is about 19 vCPU and 38 GB at minimum replicas; the autoscaler covers scale-out |
+
+**Production sizing does not fit the 3-node pool**: pods would stay Pending. For dev and test, start `values-<env>.yaml` from the `services:` block of `values-demo.yaml` (the deploy workflow reads `values-<env>.yaml` when it exists, otherwise the production defaults in `values.yaml`).
+
+Two more points:
+- **Units**: OCI sizes nodes in OCPUs; one OCPU is two vCPUs, so 2 OCPU is 4 vCPU. Everything in these runbooks is in vCPUs.
+- **Fewer modules, fewer pods**: without credit cards there is no credit-adapter, without reconciliation no recon-service, and without any card module no thredd-adapter or ehi-responder (the largest service: 3 to 10 pods of 1 vCPU in production).
 
 ## 4. Kafka topics
 
@@ -114,7 +136,7 @@ Run the **deploy** workflow in GitHub Actions: *Actions → deploy → Run workf
 
 1. builds and tests the code with only those modules,
 2. builds and pushes the images: bff, orchestrator, mapping-service, ehi-responder, essence-adapter, thredd-adapter, atfinity-adapter, credit-adapter, recon-service, vendor-simulator and web,
-3. runs `helm upgrade --install pbp-<env>` with `values-<env>.yaml` and the module list.
+3. runs `helm upgrade --install pbp-<env>` with `values-<env>.yaml` and the module list. Without a `values-<env>.yaml` it uses production sizing, which needs the production node pool (section 3a).
 
 Repository settings it needs: secrets `OCIR_REGISTRY`, `OCIR_USERNAME`, `OCIR_TOKEN`, `KUBECONFIG_B64`; variables `IDENTITY_URL`, `GRAFANA_URL`.
 
