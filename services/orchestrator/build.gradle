@@ -1,5 +1,12 @@
-// Orchestrator: Temporal workflows that glue the vendors together for every journey (LLD section 3).
+// Orchestrator: the one deployable that runs every domain's Temporal workflows (LLD section 3). The sagas live in
+// the domain modules under domains/; this app assembles them and starts one Temporal worker per task queue.
 dependencies {
+    implementation project(':libs:orchestration-core')
+    // Only the modules switched on for this build (rootProject.enabledModules); recon has no sagas here.
+    rootProject.enabledModules.findAll { it != 'recon' }.each { m ->
+        implementation project(":domains:${m}-orchestration")
+    }
+
     implementation "io.temporal:temporal-sdk:${rootProject.temporalVersion}"
     // Observability (LLD section 15): workflow and activity spans join the caller's trace.
     implementation "io.temporal:temporal-opentracing:${rootProject.temporalVersion}"
@@ -9,5 +16,6 @@ dependencies {
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
-    testImplementation "io.temporal:temporal-testing:${rootProject.temporalVersion}"
+    // Domain boundaries (DomainBoundariesTest).
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
 }

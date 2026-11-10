@@ -1,0 +1,5 @@
+// The compliance domain's sagas and their HTTP and Kafka entry points; assembled into services/orchestrator.
+dependencies {
+    // The Control Room decision on a held high-value payment signals that payment's saga.
+    implementation project(':domains:payments-orchestration')
+}

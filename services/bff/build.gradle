@@ -1,9 +1,18 @@
-// Backend for frontend: the only entry point for the customer and staff portals (LLD section 2).
+// Backend for frontend: the only entry point for the customer and staff portals (LLD section 2). Each domain's routes
+// live in its module under domains/<domain>/bff; this app adds login, the home screen, live push and the staff queue.
 dependencies {
+    implementation project(':libs:bff-core')
+    // Only the modules switched on for this build (rootProject.enabledModules).
+    rootProject.enabledModules.each { m ->
+        implementation project(":domains:${m}-bff")
+    }
+
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.springframework.kafka:spring-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
+    // Domain boundaries (DomainBoundariesTest).
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
 }

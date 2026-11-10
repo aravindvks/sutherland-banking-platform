@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import Keycloak from 'keycloak-js';
 import App from './App';
-import { auth } from './api';
+import { auth } from './shared/api';
 // Fonts are bundled with the app (no third-party font requests from a banking page).
 import '@fontsource-variable/instrument-sans';
 import '@fontsource/ibm-plex-mono/400.css';

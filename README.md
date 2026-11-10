@@ -80,7 +80,8 @@ Prerequisites: JDK 21, Docker Desktop with Compose v2, `make`. Gradle 8.10 must 
 
 ```bash
 make up       # builds all jars, starts infrastructure + services + vendor simulator
-make smoke    # end-to-end check of every flow, including traces, metrics and logs (32 steps)
+make smoke    # end-to-end check of every flow, including traces, metrics and logs
+./scripts/smoke.sh credit recon   # only some domains; each sets up what it needs
 make down     # stop (keeps data);  make clean  removes data too
 ```
 
@@ -105,6 +106,8 @@ Infrastructure only, for running services from the IDE: `make infra`.
 | Kafka | localhost:9092 |
 
 ## What the smoke test proves
+
+The checks are grouped by domain, one file each in `scripts/smoke/`: onboarding, payments, cards, compliance, recon, credit, platform and observability. `scripts/smoke.sh` runs them all in that order; `scripts/smoke.sh <domain>…` runs only those, and each domain sets up what it needs through the fixtures in `scripts/smoke/lib.sh` (Priya, Asha, a payment, a settled card payment). CI runs the whole set, then every domain alone. The checks are the ones below; the step numbers printed during a run follow the domain order, so they differ from this list.
 
 1. Priya's master customer record linked to her Essence party and account
 2. Card tap approved through the EHI responder with an Essence hold
@@ -138,6 +141,41 @@ Infrastructure only, for running services from the IDE: `make infra`.
 30. Tracing: a card tap is a single trace from ehi-responder to the Essence hold
 31. Metrics, alerts and logs: Prometheus scrapes all 10 services, payment and card flow metrics are recorded, the alert rules are loaded, and Loki finds the payment's log lines by correlation ID
 32. Login: no token → 401; customer on the staff API → 403; view-only staff cannot run reconciliation; Asha's login linked at sign-up
+
+## Module switches (plug and play)
+
+A bank gets only the modules it runs. One list decides it, in the build, the deployment and the screens:
+
+| Module | Can be left out | What leaving it out removes |
+| --- | --- | --- |
+| onboarding, payments, compliance | No: every bank opens accounts, moves money and screens customers | |
+| cards | Yes | Debit card screen and controls, their BFF routes and the card-controls saga (onboarding still issues the card) |
+| creditcards | Yes | Credit card screens, routes, sagas, the Control Room's underwriting panel and the credit-adapter deployment |
+| recon | Yes | The reconciliation panel and routes, and the recon-service deployment |
+
+```
+PBP_MODULES=onboarding,payments,compliance,cards,recon make up      # local stack without credit cards ("Bank A")
+./gradlew bootJar -Pmodules=onboarding,payments,compliance,cards,recon
+helm upgrade --install ... --set 'modules={onboarding,payments,compliance,cards,recon}'
+```
+
+The deploy workflow takes the list as an input and uses it for both the jars and Helm. A module left out is not in
+the jars at all: its routes answer 404 and its workflows are never registered. The BFF and the orchestrator list
+what they run at `GET /v1/modules`; the web app reads the BFF's list and shows only those tabs, Control Room panels
+and demo buttons. The database schema is the same for every bank (a left-out module's tables stay empty).
+
+CI builds and tests five banks on every change, each from its own build:
+
+| Bank | Modules | Smoke domains |
+| --- | --- | --- |
+| 1, everything | all six | all eight, then each domain alone |
+| 2, no credit cards | onboarding, payments, compliance, cards, recon | all but credit |
+| 3, no debit cards | onboarding, payments, compliance, creditcards, recon | all but cards |
+| 4, no reconciliation | onboarding, payments, compliance, cards, creditcards | all but recon |
+| 5, core only | onboarding, payments, compliance | onboarding, payments, compliance, platform, observability |
+
+`scripts/smoke.sh` reads `PBP_MODULES`: it runs only the domains of modules that are on, and checks that every module
+that is off has no routes (404) and is missing from both apps' `/v1/modules`. The chart check renders all five banks.
 
 ## Observability (LLD section 15)
 
@@ -189,8 +227,17 @@ linked to the new bank customer when onboarding completes. Running the BFF from 
 
 ```
 libs/platform-common      correlation IDs, problem+json errors, event envelope, Kafka publisher
-services/bff              POST /v1/payments → payment-commands (Idempotency-Key, 202 Accepted)
-services/orchestrator     Temporal payment saga (task queue "payments"), Kafka command listener
+libs/bff-core             who is calling (Caller) and Idempotency-Key handling, shared by the BFF routes
+libs/orchestration-core   Temporal task queues, worker registration, HTTP clients and activity rules shared by the sagas
+domains/<domain>/orchestration  one module per business domain: onboarding, payments (with schedules and
+                          Direct Debits), cards, creditcards, compliance. Each holds that domain's sagas, listeners and
+                          controllers and registers its own Temporal workers
+domains/<domain>/bff      that domain's BFF routes for the customer app and the Control Room (onboarding, payments,
+                          cards, creditcards, compliance, recon)
+services/bff              the one entry point for both portals: assembles the domains' routes and adds login, the
+                          home screen (/v1/me), live push and the staff queue
+services/orchestrator     the one deployable that assembles the domain modules: one Temporal worker per task queue,
+                          Flyway migrations, flow metrics. tests/DomainBoundariesTest says which domain may use which
 services/mapping-service  master customer ID ↔ Atfinity / Essence / Thredd IDs, audit, mapping-events
 services/ehi-responder    POST /ehi/v1/messages: card → customer → status → Essence balance → decision
 services/essence-adapter  balance (standard and EHI lanes), same-bank transfer
@@ -198,7 +245,9 @@ services/thredd-adapter   card issue (token only, PAN pattern guard)
 services/atfinity-adapter open KYC/KYB case
 services/recon-service    nightly run records (matching rules in Phase 2)
 simulators/vendor-simulator  Essence, Thredd and Atfinity stand-ins; signed webhooks; X-Sim-Scenario
-web/                      customer web app (React + Vite), served by nginx in Docker
+web/                      customer web app and Control Room (React + Vite), served by nginx in Docker; one folder
+                          per module in web/src/modules (onboarding, payments, cards, creditcards), shared pieces in
+                          web/src/shared
 infra/compose             Docker Compose, topic creation, service image
 services/credit-adapter   credit bureau and decision engine (vendor not chosen; simulator stand-in)
 infra/observability       OpenTelemetry Collector, Prometheus and alert rules, Tempo, Promtail, Grafana dashboards

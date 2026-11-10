@@ -1,6 +1,9 @@
 {{- /* One Deployment, Service, HPA and PDB per enabled service (LLD section 13). */ -}}
+{{- /* A service that belongs to a module is deployed only when that module is switched on (values: modules). */ -}}
+{{- $moduleOf := dict "credit-adapter" "creditcards" "recon-service" "recon" }}
 {{- range $name, $s := .Values.services }}
-{{- if ne (toString $s.enabled) "false" }}
+{{- $module := get $moduleOf $name }}
+{{- if and (ne (toString $s.enabled) "false") (or (not $module) (has $module $.Values.modules)) }}
 ---
 apiVersion: apps/v1
 kind: Deployment

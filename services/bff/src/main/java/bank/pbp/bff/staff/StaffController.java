@@ -1,13 +1,12 @@
 package bank.pbp.bff.staff;
 
 import bank.pbp.bff.security.Caller;
-import jakarta.servlet.http.HttpServletRequest;
 import bank.pbp.common.error.VendorErrors;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import java.util.LinkedHashMap;
+import jakarta.validation.constraints.NotNull;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,39 +19,21 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
 
 /**
- * Staff portal entry point. Viewing needs the staff role; decisions and reconciliation runs need
- * compliance (see SecurityConfig). The signed-in reviewer is recorded as the actor on every change.
+ * Staff portal entry point for what every bank has: the work queue, recent sagas, a journey by correlation ID and
+ * linking logins. Each domain module adds its own Control Room routes under /v1/staff (reviews, held payments,
+ * underwriting, reconciliation). Viewing needs the staff role; decisions and reconciliation runs need compliance
+ * (see SecurityConfig). The signed-in reviewer is recorded as the actor on every change.
  */
 @RestController
 @RequestMapping("/v1/staff")
 public class StaffController {
 
     private final RestClient orchestrator;
-    private final RestClient recon;
     private final Caller caller;
 
-    public StaffController(Caller caller, RestClient.Builder builder, @Value("${pbp.services.orchestrator-url}") String url,
-                           @Value("${pbp.services.recon-url}") String reconUrl) {
+    public StaffController(Caller caller, RestClient.Builder builder, @Value("${pbp.services.orchestrator-url}") String url) {
         this.caller = caller;
         this.orchestrator = builder.clone().baseUrl(url).build();
-        this.recon = builder.clone().baseUrl(reconUrl).build();
-    }
-
-    @GetMapping("/recon/runs")
-    public JsonNode reconRuns() {
-        return VendorErrors.call("recon", "runs.list", () -> recon.get().uri("/v1/recon/runs").retrieve().body(JsonNode.class));
-    }
-
-    @GetMapping("/recon/exceptions")
-    public JsonNode reconExceptions() {
-        return VendorErrors.call("recon", "exceptions.list", () -> recon.get().uri("/v1/recon/exceptions")
-                .retrieve().body(JsonNode.class));
-    }
-
-    @PostMapping("/recon/runs")
-    public JsonNode reconRun() {
-        return VendorErrors.call("recon", "runs.trigger", () -> recon.post().uri("/v1/recon/runs")
-                .retrieve().body(JsonNode.class));
     }
 
     @GetMapping("/queue")
@@ -70,55 +51,6 @@ public class StaffController {
         return get("/v1/staff/journeys/" + correlationId);
     }
 
-    @PostMapping("/reviews/{sagaId}")
-    public JsonNode review(@PathVariable UUID sagaId, @Valid @RequestBody Decision body, HttpServletRequest request) {
-        String staff = caller.username(request);
-        Map<String, Object> req = new LinkedHashMap<>();
-        req.put("decision", body.decision());
-        req.put("reviewer", staff);
-        req.put("note", body.note());
-        return VendorErrors.call("orchestrator", "staff.review", () -> orchestrator.post()
-                .uri("/v1/staff/reviews/{id}", sagaId).body(req).retrieve().body(JsonNode.class));
-    }
-
-    /** Approve or reject a HELD high-value payment. */
-    @PostMapping("/payments/{paymentId}/decision")
-    public JsonNode paymentDecision(@PathVariable UUID paymentId, @Valid @RequestBody PaymentDecision body,
-                                    HttpServletRequest request) {
-        Map<String, Object> req = new LinkedHashMap<>();
-        req.put("decision", body.decision());
-        req.put("reviewer", caller.username(request));
-        req.put("note", body.note());
-        return VendorErrors.call("orchestrator", "staff.payment_decision", () -> orchestrator.post()
-                .uri("/v1/staff/payments/{id}/decision", paymentId).body(req).retrieve().body(JsonNode.class));
-    }
-
-    /** The underwriting queue: credit card applications the decision engine referred. */
-    @GetMapping("/credit-applications")
-    public JsonNode creditReferrals() {
-        return VendorErrors.call("orchestrator", "staff.credit_referrals", () -> orchestrator.get()
-                .uri("/v1/staff/credit-applications").retrieve().body(JsonNode.class));
-    }
-
-    /** An underwriter approves (optionally with a different limit) or declines a referred application. */
-    @PostMapping("/credit-applications/{applicationId}/decision")
-    public JsonNode creditDecision(@PathVariable UUID applicationId, @Valid @RequestBody CreditDecision body,
-                                   HttpServletRequest request) {
-        Map<String, Object> req = new LinkedHashMap<>();
-        req.put("decision", body.decision());
-        req.put("creditLimit", body.creditLimit());
-        req.put("reviewer", caller.username(request));
-        req.put("note", body.note());
-        return VendorErrors.call("orchestrator", "staff.credit_decision", () -> orchestrator.post()
-                .uri("/v1/staff/credit-applications/{id}/decision", applicationId).body(req).retrieve().body(JsonNode.class));
-    }
-
-    public record CreditDecision(@jakarta.validation.constraints.NotBlank
-                                 @jakarta.validation.constraints.Pattern(regexp = "APPROVE|DECLINE") String decision,
-                                 @jakarta.validation.constraints.Pattern(regexp = "\\d{1,6}(\\.\\d{2})?") String creditLimit,
-                                 String note) {
-    }
-
     /** Links an online banking login to an existing bank customer (e.g. a customer opened in branch). */
     @PostMapping("/logins")
     public Map<String, Object> linkLogin(@Valid @RequestBody LoginLink body, HttpServletRequest request) {
@@ -126,17 +58,11 @@ public class StaffController {
         return Map.of("username", body.username(), "customerId", body.customerId().toString(), "status", "LINKED");
     }
 
-    public record LoginLink(@NotBlank String username, @jakarta.validation.constraints.NotNull UUID customerId) {
+    public record LoginLink(@NotBlank String username, @NotNull UUID customerId) {
     }
 
     private JsonNode get(String path) {
         return VendorErrors.call("orchestrator", "staff.get", () -> orchestrator.get().uri(path)
                 .retrieve().body(JsonNode.class));
-    }
-
-    public record PaymentDecision(@NotBlank @Pattern(regexp = "APPROVE|REJECT") String decision, String note) {
-    }
-
-    public record Decision(@NotBlank @Pattern(regexp = "CLEAR|CONFIRM") String decision, String note) {
     }
 }

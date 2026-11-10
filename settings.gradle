@@ -6,6 +6,19 @@ plugins {
 rootProject.name = 'sutherland-banking-platform'
 
 include 'libs:platform-common'
+include 'libs:orchestration-core'
+include 'libs:bff-core'
+
+// Business domains, one folder each (domains/<domain>/...). Each part of a domain is its own module with a
+// unique name, so the jars never clash inside an application that assembles several of them.
+['onboarding', 'payments', 'cards', 'creditcards', 'compliance'].each { d ->
+    include "domains:${d}-orchestration"
+    project(":domains:${d}-orchestration").projectDir = file("domains/${d}/orchestration")
+}
+['onboarding', 'payments', 'cards', 'creditcards', 'compliance', 'recon'].each { d ->
+    include "domains:${d}-bff"
+    project(":domains:${d}-bff").projectDir = file("domains/${d}/bff")
+}
 
 include 'services:bff'
 include 'services:orchestrator'

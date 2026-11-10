@@ -75,12 +75,26 @@ jobs:
           # Same chart on AWS and Azure: only values-<cloud>.yaml differs.
           helm template pbp-aws deploy/helm/pbp -f deploy/helm/pbp/values-aws.yaml > rendered-aws.yaml
           helm template pbp-azure deploy/helm/pbp -f deploy/helm/pbp/values-azure.yaml > rendered-azure.yaml
+          # Module switches: the five banks CI tests. credit-adapter only with creditcards, recon-service only with recon.
+          for set in onboarding,payments,compliance,cards,creditcards,recon onboarding,payments,compliance,cards,recon \
+                     onboarding,payments,compliance,creditcards,recon onboarding,payments,compliance,cards,creditcards \
+                     onboarding,payments,compliance; do
+            out="rendered-modules-$(echo "$set" | tr ',' '-').yaml"
+            helm template pbp-mods deploy/helm/pbp --set "modules={$set}" > "$out"
+            for pair in credit-adapter:creditcards recon-service:recon; do
+              svc=${pair%%:*}; mod=${pair##*:}
+              if echo ",$set," | grep -q ",$mod,"; then want=1; else want=0; fi
+              if grep -q "name: $svc\$" "$out"; then got=1; else got=0; fi
+              [ "$want" = "$got" ] || { echo "Modules $set: $svc rendered=$got, expected $want"; exit 1; }
+            done
+            echo "Modules $set: chart renders the right services"
+          done
           grep -q "aws-load-balancer-type: external" rendered-aws.yaml && grep -q "kind: Ingress" rendered-aws.yaml \
             && grep -q "name: kafka-topics" rendered-aws.yaml
           grep -q "azure-load-balancer-internal" rendered-azure.yaml && ! grep -q "oci-load-balancer" rendered-azure.yaml
           grep -q "kind: PrometheusRule" rendered-obs.yaml && grep -q "dashboard-pbp-payments" rendered-obs.yaml
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
-          ./kubeconform -strict -summary -ignore-missing-schemas rendered.yaml rendered-demo.yaml rendered-obs.yaml rendered-aws.yaml rendered-azure.yaml 2>&1 | tee -a helm.log
+          ./kubeconform -strict -summary -ignore-missing-schemas rendered.yaml rendered-demo.yaml rendered-obs.yaml rendered-aws.yaml rendered-azure.yaml rendered-modules-*.yaml 2>&1 | tee -a helm.log
       - name: Check alert rules and collector config
         run: |
           set -o pipefail
@@ -96,9 +110,28 @@ jobs:
 
   # Starts the full stack in Docker and runs scripts/smoke.sh: mapping links, a card tap through
   # the EHI responder, and a same-bank payment through BFF → Kafka → Temporal → Essence adapter.
+  # Five banks from the same code (module switches, phase A). Each bank builds only its modules, and its smoke test
+  # runs the domains of those modules and checks that every module left out has no routes or workflows.
   e2e:
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - set: bank-1-everything
+            modules: onboarding,payments,compliance,cards,creditcards,recon
+          - set: bank-2-no-credit-cards
+            modules: onboarding,payments,compliance,cards,recon
+          - set: bank-3-no-debit-cards
+            modules: onboarding,payments,compliance,creditcards,recon
+          - set: bank-4-no-reconciliation
+            modules: onboarding,payments,compliance,cards,creditcards
+          - set: bank-5-core-only
+            modules: onboarding,payments,compliance
+    name: e2e (${{ matrix.set }})
+    env:
+      PBP_MODULES: ${{ matrix.modules }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -135,6 +168,18 @@ jobs:
           set -o pipefail
           ./scripts/smoke.sh 2>&1 | tee smoke.log
 
+      # Every domain must prove itself alone (phase A, "every domain proves itself alone"): run each on its own,
+      # setting up only what it needs through the fixtures in scripts/smoke/lib.sh.
+      - name: Smoke test, each domain alone
+        if: matrix.set == 'bank-1-everything'
+        shell: bash
+        run: |
+          set -o pipefail
+          for d in onboarding payments cards compliance recon credit platform observability; do
+            echo "==== $d alone ====" | tee -a smoke.log
+            ./scripts/smoke.sh "$d" 2>&1 | tee -a smoke.log
+          done
+
       - name: Observability stack status
         if: always()
         run: |
@@ -158,12 +203,16 @@ jobs:
           docker compose -f infra/compose/docker-compose.yml --profile apps logs --no-color > stack.log 2>&1 || true
           {
             cat ps.txt
-            echo "---- smoke ----"; cat smoke.log 2>/dev/null
+            echo "---- smoke ----"; cat smoke.log 2>/dev/null || echo "(the smoke test did not run)"
             echo "---- errors ----"
             grep -E "ERROR|Exception|Caused by|FAIL|refused|denied" stack.log | grep -v "WARN" | head -80
           } > summary.txt
           # Service errors first, one annotation each, so they are not cut off by the long summary.
           grep -E "Exception|Caused by| ERROR " stack.log | grep -v WARN | sed 's/\x1b\[[0-9;]*m//g' | awk '!seen[$0]++' \
             | head -8 | cut -c1-700 | sed 's/^/::error title=Service error::/' || true
+          # A service that never became healthy: show the end of its log in the step output.
+          for s in $(docker compose -f infra/compose/docker-compose.yml --profile apps ps -a --format '{{.Service}} {{.Status}}' 2>/dev/null | grep -viE ' Up .*healthy|Up [0-9]+ (seconds|minutes|hours)$' | awk '{print $1}'); do
+            echo "---- $s (last 60 lines) ----"; docker compose -f infra/compose/docker-compose.yml --profile apps logs --no-color --tail 60 "$s" 2>&1 || true
+          done
           msg=$(sed -e 's/%/%25/g' summary.txt | cut -c1-400 | awk '{printf "%s%%0A", $0}')
           echo "::error title=End-to-end failed::${msg}"

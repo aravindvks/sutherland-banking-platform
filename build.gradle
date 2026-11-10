@@ -9,6 +9,26 @@ ext {
     temporalVersion = '1.25.1'
 }
 
+// Module switches (phase A, step 4). The apps assemble only the modules chosen here:
+//   ./gradlew bootJar -Pmodules=onboarding,payments,compliance,cards,recon     (or PBP_MODULES in the environment)
+// Default: every module. Onboarding, payments and compliance are always on (every bank opens accounts, moves money
+// and screens customers); cards, creditcards and recon can be left out.
+ext.allModules = ['onboarding', 'payments', 'compliance', 'cards', 'creditcards', 'recon']
+ext.requiredModules = ['onboarding', 'payments', 'compliance']
+ext.enabledModules = {
+    String chosen = findProperty('modules') ?: System.getenv('PBP_MODULES') ?: allModules.join(',')
+    List<String> list = chosen.split(',')*.trim().findAll { it }
+    List<String> unknown = list - allModules
+    if (unknown) {
+        throw new GradleException("Unknown module(s) ${unknown}. Modules: ${allModules.join(', ')}")
+    }
+    List<String> missing = requiredModules - list
+    if (missing) {
+        throw new GradleException("Module(s) ${missing} are always on; add them to the list")
+    }
+    allModules.findAll { it in list }
+}()
+
 allprojects {
     group = 'bank.pbp'
     version = '0.1.0-SNAPSHOT'
@@ -49,6 +69,35 @@ subprojects { sub ->
 
     dependencies {
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    // A domain's orchestration module (domains/<domain>/orchestration): a library of that domain's sagas, listeners
+    // and controllers, assembled by services/orchestrator. Domain-to-domain dependencies are declared per module.
+    if (sub.path.startsWith(':domains:') && sub.name.endsWith('-orchestration')) {
+        apply plugin: 'java-library'
+
+        dependencies {
+            api project(':libs:orchestration-core')
+            implementation 'org.springframework.boot:spring-boot-starter-validation'
+            implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+            implementation 'org.springframework.kafka:spring-kafka'
+            implementation 'io.micrometer:micrometer-core'
+            testImplementation "io.temporal:temporal-testing:${rootProject.temporalVersion}"
+            testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        }
+    }
+
+    // A domain's BFF module (domains/<domain>/bff): that domain's routes for the customer app and the Control Room,
+    // assembled by services/bff.
+    if (sub.path.startsWith(':domains:') && sub.name.endsWith('-bff')) {
+        apply plugin: 'java-library'
+
+        dependencies {
+            api project(':libs:bff-core')
+            implementation 'org.springframework.boot:spring-boot-starter-validation'
+            implementation 'org.springframework.kafka:spring-kafka'
+            testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        }
     }
 
     // Services and simulators are runnable Spring Boot apps.

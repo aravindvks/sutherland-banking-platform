@@ -1,0 +1,9 @@
+// What every domain's orchestration module shares: Temporal task queues, the worker registration contract,
+// HTTP clients for the services the sagas call, and the rules for activities that call them.
+apply plugin: 'java-library'
+
+dependencies {
+    api project(':libs:platform-common')
+    api "io.temporal:temporal-sdk:${rootProject.temporalVersion}"
+    api 'org.springframework.boot:spring-boot-starter-web'
+}

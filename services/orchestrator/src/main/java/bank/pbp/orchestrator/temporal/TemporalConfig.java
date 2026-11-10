@@ -1,21 +1,5 @@
 package bank.pbp.orchestrator.temporal;
 
-import bank.pbp.orchestrator.cards.CardActivitiesImpl;
-import bank.pbp.orchestrator.cards.CardControlsWorkflow;
-import bank.pbp.orchestrator.compliance.ComplianceActivitiesImpl;
-import bank.pbp.orchestrator.compliance.ComplianceWorkflow;
-import bank.pbp.orchestrator.creditcards.CreditCardActivitiesImpl;
-import bank.pbp.orchestrator.creditcards.CreditCardWorkflows;
-import bank.pbp.orchestrator.directdebits.DirectDebitActivitiesImpl;
-import bank.pbp.orchestrator.directdebits.DirectDebitWorkflows;
-import bank.pbp.orchestrator.onboarding.OnboardingActivitiesImpl;
-import bank.pbp.orchestrator.onboarding.OnboardingWorkflowImpl;
-import bank.pbp.orchestrator.payments.InboundActivitiesImpl;
-import bank.pbp.orchestrator.payments.InboundPaymentWorkflow;
-import bank.pbp.orchestrator.payments.PaymentActivitiesImpl;
-import bank.pbp.orchestrator.payments.PaymentWorkflowImpl;
-import bank.pbp.orchestrator.schedules.ScheduleActivitiesImpl;
-import bank.pbp.orchestrator.schedules.ScheduleWorkflow;
 import com.uber.m3.tally.RootScopeBuilder;
 import com.uber.m3.tally.Scope;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -32,6 +16,9 @@ import io.temporal.serviceclient.WorkflowServiceStubsOptions;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
 import io.temporal.worker.WorkerFactoryOptions;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,17 +68,10 @@ public class TemporalConfig {
                 .setWorkerInterceptors(new OpenTracingWorkerInterceptor(tracing)).build());
     }
 
+    /** One worker per task queue, with every domain's registrations for that queue (see {@link WorkerRegistration}). */
     @Bean
-    TemporalWorkers temporalWorkers(WorkerFactory factory, PaymentActivitiesImpl paymentActivities,
-                                    OnboardingActivitiesImpl onboardingActivities,
-                                    ComplianceActivitiesImpl complianceActivities,
-                                    InboundActivitiesImpl inboundActivities,
-                                    CardActivitiesImpl cardActivities,
-                                    ScheduleActivitiesImpl scheduleActivities,
-                                    DirectDebitActivitiesImpl directDebitActivities,
-                                    CreditCardActivitiesImpl creditCardActivities) {
-        return new TemporalWorkers(factory, paymentActivities, onboardingActivities, complianceActivities,
-                inboundActivities, cardActivities, scheduleActivities, directDebitActivities, creditCardActivities);
+    TemporalWorkers temporalWorkers(WorkerFactory factory, List<WorkerRegistration> registrations) {
+        return new TemporalWorkers(factory, registrations);
     }
 
     /** Starts polling after the context is ready and stops cleanly on shutdown. */
@@ -100,55 +80,26 @@ public class TemporalConfig {
         private static final Logger log = LoggerFactory.getLogger(TemporalWorkers.class);
 
         private final WorkerFactory factory;
-        private final PaymentActivitiesImpl paymentActivities;
-        private final OnboardingActivitiesImpl onboardingActivities;
-        private final ComplianceActivitiesImpl complianceActivities;
-        private final InboundActivitiesImpl inboundActivities;
-        private final CardActivitiesImpl cardActivities;
-        private final ScheduleActivitiesImpl scheduleActivities;
-        private final DirectDebitActivitiesImpl directDebitActivities;
-        private final CreditCardActivitiesImpl creditCardActivities;
+        private final List<WorkerRegistration> registrations;
         private volatile boolean running;
 
-        TemporalWorkers(WorkerFactory factory, PaymentActivitiesImpl paymentActivities,
-                        OnboardingActivitiesImpl onboardingActivities, ComplianceActivitiesImpl complianceActivities,
-                        InboundActivitiesImpl inboundActivities, CardActivitiesImpl cardActivities,
-                        ScheduleActivitiesImpl scheduleActivities, DirectDebitActivitiesImpl directDebitActivities,
-                        CreditCardActivitiesImpl creditCardActivities) {
+        TemporalWorkers(WorkerFactory factory, List<WorkerRegistration> registrations) {
             this.factory = factory;
-            this.paymentActivities = paymentActivities;
-            this.onboardingActivities = onboardingActivities;
-            this.complianceActivities = complianceActivities;
-            this.inboundActivities = inboundActivities;
-            this.cardActivities = cardActivities;
-            this.scheduleActivities = scheduleActivities;
-            this.directDebitActivities = directDebitActivities;
-            this.creditCardActivities = creditCardActivities;
+            this.registrations = List.copyOf(registrations);
         }
 
         @Override
         public void start() {
-            Worker payments = factory.newWorker(TaskQueues.PAYMENTS);
-            payments.registerWorkflowImplementationTypes(PaymentWorkflowImpl.class, InboundPaymentWorkflow.Impl.class,
-                    ScheduleWorkflow.Impl.class, DirectDebitWorkflows.MandateImpl.class,
-                    DirectDebitWorkflows.CollectionImpl.class, DirectDebitWorkflows.ClaimImpl.class);
-            payments.registerActivitiesImplementations(paymentActivities, inboundActivities, scheduleActivities,
-                    directDebitActivities);
-            Worker onboarding = factory.newWorker(TaskQueues.ONBOARDING);
-            onboarding.registerWorkflowImplementationTypes(OnboardingWorkflowImpl.class);
-            onboarding.registerActivitiesImplementations(onboardingActivities);
-            Worker compliance = factory.newWorker(TaskQueues.COMPLIANCE);
-            compliance.registerWorkflowImplementationTypes(ComplianceWorkflow.Impl.class);
-            compliance.registerActivitiesImplementations(complianceActivities);
-            Worker cards = factory.newWorker(TaskQueues.CARDS);
-            cards.registerWorkflowImplementationTypes(CardControlsWorkflow.Impl.class,
-                    CreditCardWorkflows.ApplicationImpl.class, CreditCardWorkflows.RepaymentImpl.class,
-                    CreditCardWorkflows.StatementImpl.class, CreditCardWorkflows.WithdrawalImpl.class);
-            cards.registerActivitiesImplementations(cardActivities, creditCardActivities);
+            Map<String, Worker> workers = new LinkedHashMap<>();
+            for (WorkerRegistration r : registrations) {
+                Worker worker = workers.computeIfAbsent(r.taskQueue(), factory::newWorker);
+                worker.registerWorkflowImplementationTypes(r.workflowTypes().toArray(Class<?>[]::new));
+                worker.registerActivitiesImplementations(r.activities().toArray());
+            }
             factory.start();
             running = true;
-            log.info("temporal.workers.started queues=[{}, {}, {}]", TaskQueues.PAYMENTS, TaskQueues.ONBOARDING,
-                    TaskQueues.COMPLIANCE);
+            log.info("temporal.workers.started queues={} domains={}", workers.keySet(),
+                    registrations.stream().map(WorkerRegistration::domain).toList());
         }
 
         @Override
