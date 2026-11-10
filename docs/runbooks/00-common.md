@@ -65,7 +65,7 @@ Create these if the event service does not create them on first use (OCI and Azu
 | onboarding-events | 6 | 7 days (30 in production) |
 | mapping-events | 6 | Compacted |
 | `<topic>.DLT` for each | 3 | 7 days |
-| pbp-connect-configs, pbp-connect-offsets, pbp-connect-statuses | 1 / 25 / 5 | Compacted (Kafka Connect's own topics) |
+| pbp-connect-configs, pbp-connect-offsets, pbp-connect-statuses | 1 / 25 / 5 | Compacted (Kafka Connect's own topics; on OCI a Connect configuration provides them instead) |
 
 ## 5. The environment manifest
 
@@ -120,11 +120,12 @@ Repository settings it needs: secrets `OCIR_REGISTRY`, `OCIR_USERNAME`, `OCIR_TO
 
 **Today the workflow pushes to OCIR only.** On AWS or Azure, push the images and run the same `helm upgrade` by hand with `-f values-aws.yaml` or `-f values-azure.yaml` until the workflow takes a cloud input (phase B).
 
+The deploy also registers the Debezium outbox connector on Kafka Connect (a Helm hook Job, `register-outbox-connector`, after every install or upgrade), using the database host from the manifest and the service user from the secrets. The service user needs the REPLICATION privilege and the database `wal_level = logical` (cloud runbook).
+
 **After the first deploy**
 
-1. Register the outbox connector on Kafka Connect, with the managed database's host and the service user (the same settings as `infra/compose/register-outbox-connector.sh`). The service user needs the REPLICATION privilege.
-2. Wire the public entry and WAF to the load balancers the chart created (cloud runbook: on OCI, set `bff_backend_url` and `ehi_load_balancer_id` and apply Terraform again).
-3. Point the DNS names at the entries, and give Thredd the EHI host name.
+1. Wire the public entry and WAF to the load balancers the chart created (cloud runbook: on OCI, set `bff_backend_url` and `ehi_load_balancer_id` and apply Terraform again).
+2. Point the DNS names at the entries, and give Thredd the EHI host name.
 
 ## 8. Check the environment
 
@@ -144,6 +145,5 @@ Repository settings it needs: secrets `OCIR_REGISTRY`, `OCIR_USERNAME`, `OCIR_TO
 ## 10. Known gaps (to close in phase B)
 
 - The deploy workflow pushes to OCIR only; it needs a cloud input and a registry login per cloud.
-- The outbox connector is registered by hand after the first deploy.
-- The OCI module does not yet create the four `pbp-<env>-…` secrets, the credit-adapter image repository, Kafka Connect's storage topics, or the PostgreSQL logical replication setting (OCI runbook, section 11).
+- On OCI, whether the managed PostgreSQL accepts `wal_level = logical` is confirmed only on the first apply (OCI runbook, section 11).
 - Saudi Arabia and UAE deployments and the in-country standby region: phases C and D, after approval.

@@ -11,7 +11,7 @@
 - **Tools on the operator's machine**: OCI CLI, `kubectl`, `helm`, Terraform 1.6+ (for the Terraform path).
 - **Decisions** from the common runbook, section 2: environment name, modules, network range (default `10.20.0.0/16`).
 
-**Terraform path**: in `infra/terraform/oci`, copy `terraform.tfvars.example` and `backend.hcl.example`, fill in `compartment_id`, `env`, `node_image_id`, `postgres_password` and `thredd_ehi_source_cidrs`, then `terraform init -backend-config=backend.hcl` and `terraform apply`. It creates sections 2 to 9 below; section 11 lists what it does not create yet.
+**Terraform path**: in `infra/terraform/oci`, copy `terraform.tfvars.example` and `backend.hcl.example`, fill in `tenancy_ocid`, `compartment_id`, `env`, `modules`, `node_image_id`, `postgres_password`, `webhook_secret`, `streaming_user`, `streaming_auth_token` and `thredd_ehi_source_cidrs`, then `terraform init -backend-config=backend.hcl` and `terraform apply`. It creates everything in sections 2 to 9. Before applying, create the Streaming user, its group (`streaming_group`, default `pbp-streaming`) and an auth token (section 5); Terraform does not create users.
 
 ## 2. Network (VCN)
 
@@ -49,14 +49,16 @@ Reach the private API endpoint through the OCI Bastion service or a VPN, then `o
 
 | Create | Setting | Terraform |
 | --- | --- | --- |
-| DB system `pbp-<env>-pg` | Version 16; PostgreSQL.VM.Standard.E4.Flex, 2 OCPU, 32 GB; **2 instances** (primary plus read replica, which the EHI responder reads if the cache is down); subnet `data`; OCI-optimised, regionally durable storage; admin user `pbpadmin` | `oci_psql_db_system.pg` |
+| Configuration `pbp-<env>-pg-logical` | PostgreSQL 16, same shape; overrides `wal_level = logical`, `max_replication_slots = 10`, `max_wal_senders = 10` (for the outbox relay) | `oci_psql_configuration.pg` |
+| DB system `pbp-<env>-pg` | Version 16; PostgreSQL.VM.Standard.E4.Flex, 2 OCPU, 32 GB; **2 instances** (primary plus read replica, which the EHI responder reads if the cache is down); subnet `data`; OCI-optimised, regionally durable storage; admin user `pbpadmin`; **the configuration above** | `oci_psql_db_system.pg` |
 
 Then, connected as the admin user:
 
-1. Create the database `pbp` and the service user (its name and password go into the secrets `pbp-<env>-db-user` and `-db-password`). The services create their own schemas with Flyway on start-up.
-2. Create the databases `temporal` and `temporal_visibility` for Temporal.
-3. **Logical replication** (needed by the outbox relay): set `wal_level = logical` through a custom DB system configuration and give the service user REPLICATION. **To confirm**: OCI Database with PostgreSQL support for this. If it is not available, the fallback is a polling outbox relay (a code change, phase B).
-4. Size `max_connections` for pods × 10 (the services' connection pool) plus Temporal.
+1. Create the database `pbp`. The services connect as `pbpadmin` (the secrets `pbp-<env>-db-user` and `-db-password`, as on AWS) and create their own schemas with Flyway on start-up.
+2. Give `pbpadmin` REPLICATION (`ALTER ROLE pbpadmin WITH REPLICATION;`) for the outbox relay.
+3. Create the databases `temporal` and `temporal_visibility` for Temporal.
+4. Check logical replication: `SHOW wal_level;` must answer `logical`. Oracle documents logical replication on this service (pglogical, replication slots); whether it accepts the `wal_level` override for Debezium's `pgoutput` is confirmed on the first apply. If not, the fallback is a polling outbox relay (a code change).
+5. Size `max_connections` for pods × 10 (the services' connection pool) plus Temporal.
 
 Write down: the primary endpoint's private IP (manifest: `config.DB_HOST`).
 
@@ -66,16 +68,17 @@ Write down: the primary endpoint's private IP (manifest: `config.DB_HOST`).
 | --- | --- | --- |
 | Stream pool `pbp-<env>-kafka` | Kafka settings on; auto-create topics **off**; private endpoint in `data` | `oci_streaming_stream_pool.kafka` |
 | Streams | The 9 topics and a `.DLT` stream for each, as in the common runbook section 4 | `oci_streaming_stream.topic` |
-| Kafka Connect storage | A Connect configuration (connect harness) for `pbp-connect-configs`, `-offsets` and `-statuses`. **Not in Terraform yet** | — |
-| Auth token | A user (or a dedicated service user) in a group allowed to use the stream pool; generate an auth token | — |
+| Connect configuration `pbp-<env>-connect` | Kafka Connect's own storage: topics `<OCID>-config`, `-offset` and `-status`. Put its OCID in the manifest as `connect.ociConnectHarnessId` | `oci_streaming_connect_harness.connect` |
+| Streaming user and auth token | **By hand, before Terraform**: a user (ideally a dedicated service user) in the group `pbp-streaming`, and an auth token for it | — |
+| Policy | The group may use the stream pool and the Connect configuration (`use stream-family`) | `oci_identity_policy.access` |
 
-The services log in with SASL_SSL and PLAIN. The JAAS line for the secret `pbp-<env>-spring-kafka-properties-sasl-jaas-config` is:
+The services log in with SASL_SSL and PLAIN. Terraform builds the JAAS line for the secret `pbp-<env>-spring-kafka-properties-sasl-jaas-config` from `streaming_user` and `streaming_auth_token`:
 
 `org.apache.kafka.common.security.plain.PlainLoginModule required username="<tenancy>/<user>/<stream pool OCID>" password="<auth token>";`
 
 Production retention: raise the event topics to 30 days if the pool allows it, otherwise rely on the Object Storage archive (HLD).
 
-Write down: the bootstrap servers (manifest: `config.KAFKA_BOOTSTRAP`).
+Write down: the bootstrap servers (manifest: `config.KAFKA_BOOTSTRAP`) and the Connect configuration's OCID (manifest: `connect.ociConnectHarnessId`).
 
 ## 6. Cache (OCI Cache)
 
@@ -94,9 +97,11 @@ Write down: the primary endpoint (manifest: `config.REDIS_HOST`).
 | Vault `pbp-<env>-vault` | Default vault | `oci_kms_vault.vault` |
 | Master key `pbp-<env>-master` | AES-256; encrypts the secrets and the buckets | `oci_kms_key.master` |
 | Secret `pbp-<env>-postgres-password` | Admin password | `oci_vault_secret.postgres` |
-| Secrets `pbp-<env>-db-user`, `-db-password`, `-webhook-secret`, `-spring-kafka-properties-sasl-jaas-config` | As in the common runbook section 5. **Not in Terraform yet: create by hand** | — |
+| Secrets `pbp-<env>-db-user`, `-db-password`, `-webhook-secret`, `-spring-kafka-properties-sasl-jaas-config` | As in the common runbook section 5 | `oci_vault_secret.service` |
+| Dynamic group `pbp-<env>-workers` | In the tenancy: every instance in the compartment (the OKE worker nodes) | `oci_identity_dynamic_group.workers` |
+| Policy `pbp-<env>-access` | The dynamic group may read secrets in the compartment (External Secrets uses the nodes' instance principal) | `oci_identity_policy.access` |
 
-For the External Secrets Operator: a dynamic group for the OKE worker nodes (or workload identity) and a policy that lets it read secrets in the vault's compartment.
+In a tenancy with several identity domains, prefix the group and dynamic group in the policy with the domain name.
 
 ## 8. Object Storage and the registry
 
@@ -104,7 +109,7 @@ For the External Secrets Operator: a dynamic group for the OKE worker nodes (or 
 | --- | --- | --- |
 | Buckets `pbp-<env>-documents`, `-settlement`, `-recon`, `-archive` | Private, versioned, encrypted with the master key | `oci_objectstorage_bucket.bucket` |
 | Bucket `pbp-<env>-archive-locked` | Private, encrypted; **retention rule 7 years**. Once a retention rule is locked, objects cannot be deleted before it ends | `oci_objectstorage_bucket.archive_locked` |
-| OCIR repositories `pbp/<image>` | Private, one per image: bff, orchestrator, mapping-service, ehi-responder, essence-adapter, thredd-adapter, atfinity-adapter, **credit-adapter**, recon-service, vendor-simulator, web | `oci_artifacts_container_repository.repo` (credit-adapter missing: section 11) |
+| OCIR repositories `pbp/<image>` | Private, one per image: bff, orchestrator, mapping-service, ehi-responder, essence-adapter, thredd-adapter, atfinity-adapter, credit-adapter, recon-service, vendor-simulator, web | `oci_artifacts_container_repository.repo` |
 
 For the deploy workflow: an OCIR user and auth token (`OCIR_USERNAME` = `<namespace>/<user>`, `OCIR_TOKEN`), and the registry prefix `uk-london-1.ocir.io/<namespace>/pbp` (`OCIR_REGISTRY`). In the cluster: the `ocir` image pull secret with the same login.
 
@@ -114,10 +119,10 @@ For the deploy workflow: an OCIR user and auth token (`OCIR_USERNAME` = `<namesp
 | --- | --- | --- |
 | API Gateway `pbp-<env>-api` | Public, in `public` | `oci_apigateway_gateway.api` |
 | Deployment `pbp-<env>-bff` | Path `/`; route `/v1/{path*}` to the web app's private load balancer; rate limit 50 requests per second per client IP | `oci_apigateway_deployment.bff` |
-| WAF policy `pbp-<env>-ehi-waf` | Default block (403); allow only Thredd's ranges | `oci_waf_web_app_firewall_policy.ehi` |
-| WAF on the EHI load balancer | Attach the policy once the load balancer exists (after the first deploy) | `oci_waf_web_app_firewall.ehi` |
+| WAF policy `pbp-<env>-ehi-waf` | Only with a card module. Default block (403); allow only Thredd's ranges | `oci_waf_web_app_firewall_policy.ehi` |
+| WAF on the EHI load balancer | Only with a card module. Attach the policy once the load balancer exists (after the first deploy) | `oci_waf_web_app_firewall.ehi` |
 
-**Only with a card module**: the chart creates the EHI load balancer (`ehi-public`), with TLS from the `ehi-tls` secret and Thredd's ranges as source ranges (`ehiLoadBalancer.sourceRanges`). Without cards, skip the WAF on it and the `ehi-tls` secret.
+**Only with a card module**: the chart creates the EHI load balancer (`ehi-public`), with TLS from the `ehi-tls` secret and Thredd's ranges as source ranges (`ehiLoadBalancer.sourceRanges`). Terraform's `modules` variable, set to the same list as Helm's, skips the WAF for a bank without cards; skip the `ehi-tls` secret too.
 
 **After the first deploy**: set `bff_backend_url` (the web app's private load balancer address) and `ehi_load_balancer_id` (the `ehi-public` load balancer OCID) and apply Terraform again; by hand, point the API Gateway route and the WAF at them.
 
@@ -148,18 +153,19 @@ DNS and TLS: a host name and certificate for the web entry (on the API Gateway) 
 | `api_gateway_hostname` | DNS for the web host |
 | `vault_id` | External Secrets `ClusterSecretStore` |
 | `apm_data_upload_endpoint` | OpenTelemetry Collector (optional) |
+| `connect_harness_id` | `connect.ociConnectHarnessId` |
 
-## 11. Gaps in the OCI module (to close in phase B)
+## 11. What still needs a person or a first apply
 
-| Gap | Until it is fixed |
+| Item | Why |
 | --- | --- |
-| No OCIR repository for `credit-adapter` | Create `pbp/credit-adapter` by hand (only with `creditcards`) |
-| The four `pbp-<env>-…` service secrets are not created | Create them by hand (section 7) |
-| PostgreSQL logical replication not configured, and support not yet confirmed | Custom configuration with `wal_level = logical`, or the polling relay fallback |
-| No Kafka Connect storage topics (connect harness) | Create a Connect configuration by hand (section 5) |
-| The outbox connector is registered by hand | Run the registration after the first deploy (common runbook, section 7) |
-| Policies for External Secrets and the stream pool user are not created | Create the dynamic group and policies by hand |
-| Thredd and EHI items are created whatever the modules | Skip the EHI WAF and `ehi-tls` when the bank has no cards |
+| Streaming user, its group and auth token | Terraform does not create users; create them before `terraform apply` (section 5) |
+| `wal_level = logical` accepted by OCI Database with PostgreSQL | Confirmed only on the first apply (`SHOW wal_level;`); fallback is a polling outbox relay |
+| `ehi-tls` and `ocir` secrets in the cluster | Certificates and registry logins stay out of Terraform state |
+| API Gateway route and EHI WAF | Point them at the load balancers after the first deploy (section 9) |
+| Identity domain application and groups | Section 10 |
+
+The outbox connector no longer needs a manual step: the deploy registers it (common runbook, section 7).
 
 ## 12. Saudi Arabia and the UAE (placeholder, phases C and D)
 
