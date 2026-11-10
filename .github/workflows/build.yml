@@ -75,15 +75,21 @@ jobs:
           # Same chart on AWS and Azure: only values-<cloud>.yaml differs.
           helm template pbp-aws deploy/helm/pbp -f deploy/helm/pbp/values-aws.yaml > rendered-aws.yaml
           helm template pbp-azure deploy/helm/pbp -f deploy/helm/pbp/values-azure.yaml > rendered-azure.yaml
-          # Module switches: the five banks CI tests. credit-adapter only with creditcards, recon-service only with recon.
+          # Module switches: the five banks CI tests. credit-adapter only with creditcards, recon-service only with recon,
+          # thredd-adapter, ehi-responder and the EHI load balancer only with a card module (cards or creditcards).
           for set in onboarding,payments,compliance,cards,creditcards,recon onboarding,payments,compliance,cards,recon \
-                     onboarding,payments,compliance,creditcards,recon onboarding,payments,compliance,cards,creditcards \
+                     onboarding,payments,compliance,recon onboarding,payments,compliance,cards,creditcards \
                      onboarding,payments,compliance; do
             out="rendered-modules-$(echo "$set" | tr ',' '-').yaml"
             helm template pbp-mods deploy/helm/pbp --set "modules={$set}" > "$out"
             for pair in credit-adapter:creditcards recon-service:recon; do
               svc=${pair%%:*}; mod=${pair##*:}
               if echo ",$set," | grep -q ",$mod,"; then want=1; else want=0; fi
+              if grep -q "name: $svc\$" "$out"; then got=1; else got=0; fi
+              [ "$want" = "$got" ] || { echo "Modules $set: $svc rendered=$got, expected $want"; exit 1; }
+            done
+            if echo ",$set," | grep -qE ",(cards|creditcards),"; then want=1; else want=0; fi
+            for svc in thredd-adapter ehi-responder ehi-public; do
               if grep -q "name: $svc\$" "$out"; then got=1; else got=0; fi
               [ "$want" = "$got" ] || { echo "Modules $set: $svc rendered=$got, expected $want"; exit 1; }
             done
@@ -123,8 +129,8 @@ jobs:
             modules: onboarding,payments,compliance,cards,creditcards,recon
           - set: bank-2-no-credit-cards
             modules: onboarding,payments,compliance,cards,recon
-          - set: bank-3-no-debit-cards
-            modules: onboarding,payments,compliance,creditcards,recon
+          - set: bank-3-corporate
+            modules: onboarding,payments,compliance,recon
           - set: bank-4-no-reconciliation
             modules: onboarding,payments,compliance,cards,creditcards
           - set: bank-5-core-only

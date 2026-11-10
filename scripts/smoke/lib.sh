@@ -173,9 +173,16 @@ cust=$(curl -sf "$MAPPING/v1/customers/$ASHA")
 echo "$cust" | grep -q '"status":"ACTIVE"' && echo "$cust" | grep -q '"kycStatus":"VALID"' \
   && pass "Customer ACTIVE with KYC VALID (orchestrator PATCH calls to the mapping service work)" \
   || fail "Expected ACTIVE and KYC VALID, got $cust"
-ASHA_CARD=$(curl -sf "$MAPPING/v1/customers/$ASHA/graph" | grep -o '"entityType":"CARD","externalId":"[^"]*"' | sed 's/.*"externalId":"\([^"]*\)"/\1/')
-[ -n "$ASHA_CARD" ] && pass "Mapping holds Asha's KYC case, party, account $ASHA_ACC and card $ASHA_CARD" \
-  || fail "No card linked for customer $ASHA"
+ASHA_CARD=$(curl -sf "$MAPPING/v1/customers/$ASHA/graph" | { grep -o '"entityType":"CARD","externalId":"[^"]*"' || true; } | sed 's/.*"externalId":"\([^"]*\)"/\1/')
+if module_on cards; then
+  [ -n "$ASHA_CARD" ] && pass "Mapping holds Asha's KYC case, party, account $ASHA_ACC and card $ASHA_CARD" \
+    || fail "No card linked for customer $ASHA"
+else
+  # A bank without the debit cards module (e.g. corporate banking) opens the account and issues no card.
+  [ -z "$ASHA_CARD" ] && ! echo "$st" | grep -q '"cardLast4":"[0-9]' \
+    && pass "Debit cards module off: account $ASHA_ACC opened and no card issued" \
+    || fail "Debit cards module is off but onboarding issued card '${ASHA_CARD}': $st"
+fi
 }
 
 # Asha has £100, recorded by the bank as a completed inbound payment.

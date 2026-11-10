@@ -1,7 +1,9 @@
-// Onboarding module: sign-up and the onboarding saga's progress (Atfinity identity check, Essence account, Thredd card).
+// Onboarding module: sign-up and the onboarding saga's progress (Atfinity identity check, Essence account, and a
+// Thredd debit card when the bank runs the debit cards module).
 import { useEffect, useState } from 'react';
 import { api, auth, ApiError, type Onboarding } from '../../shared/api';
 import { fmtSort } from '../../shared/format';
+import { has, toModules, type Modules } from '../../shared/modules';
 
 const ONBOARDING_STEPS = [
   ['CUSTOMER_CREATED', 'Customer record created'],
@@ -100,7 +102,11 @@ export function OnboardingProgress({ id, onReady, onRestart }: { id: string; onR
     return () => { stop = true; };
   }, [id]);
 
-  const reached = ONBOARDING_STEPS.findIndex(([s]) => s === state?.step);
+  // A bank without the debit cards module issues no card at onboarding, so that step is not shown.
+  const [modules, setModules] = useState<Modules>(null);
+  useEffect(() => { api.modules().then((b) => setModules(toModules(b))).catch(() => setModules(null)); }, []);
+  const steps = ONBOARDING_STEPS.filter(([s]) => s !== 'CARD_ISSUED' || has(modules, 'cards'));
+  const reached = steps.findIndex(([s]) => s === state?.step);
   const done = state?.status === 'COMPLETED';
   return (
     <main className="shell narrow">
@@ -108,7 +114,7 @@ export function OnboardingProgress({ id, onReady, onRestart }: { id: string; onR
         <p className="eyebrow">Opening your account</p>
         <h2>{done ? 'Your account is ready' : state?.status === 'REJECTED' ? 'We could not open your account' : 'Setting things up…'}</h2>
         <ol className="steps">
-          {ONBOARDING_STEPS.map(([step, label], i) => (
+          {steps.map(([step, label], i) => (
             <li key={step} className={i <= reached ? 'done' : i === reached + 1 && !state?.reason ? 'now' : ''}>{label}</li>
           ))}
         </ol>
@@ -118,7 +124,7 @@ export function OnboardingProgress({ id, onReady, onRestart }: { id: string; onR
             <dl className="kv">
               <div><dt>Sort code</dt><dd className="num">{fmtSort(state.sortCode)}</dd></div>
               <div><dt>Account number</dt><dd className="num">{state.accountNumber}</dd></div>
-              <div><dt>Card</dt><dd>•••• {state.cardLast4}</dd></div>
+              {state.cardLast4 && <div><dt>Card</dt><dd>•••• {state.cardLast4}</dd></div>}
             </dl>
             <button className="btn primary" onClick={() => onReady(state.customerId!)}>Go to my account</button>
           </>

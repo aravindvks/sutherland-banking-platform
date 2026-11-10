@@ -13,13 +13,15 @@ import java.time.Duration;
 
 /**
  * Onboarding saga (HLD flow A): customer → KYC case → wait for Atfinity → Essence party and
- * account → Thredd card → customer ACTIVE. A referred case keeps waiting for a final decision;
+ * account → Thredd debit card (only when the bank runs the debit cards module) → customer ACTIVE. A referred case keeps waiting for a final decision;
  * a rejected case ends with the customer REJECTED. Compensation for failures after KYC approval
  * (closing a half-opened account) arrives with the staff portal in Phase 2.
  */
 public class OnboardingWorkflowImpl implements OnboardingWorkflow {
 
     static final Duration KYC_WAIT = Duration.ofDays(7);
+    /** Workflow version marker: from version 1 the debit card step follows the cards module switch. */
+    static final String CARDS_SWITCH = "debit-card-follows-cards-module";
 
     private final OnboardingActivities activities = Workflow.newActivityStub(OnboardingActivities.class,
             ActivityOptions.newBuilder()
@@ -75,9 +77,13 @@ public class OnboardingWorkflowImpl implements OnboardingWorkflow {
             moveTo("RUNNING", "KYC_APPROVED");
             account = activities.openAccount(cmd, customerId);
             moveTo("RUNNING", "ACCOUNT_OPENED");
-            CardDetails card = activities.issueCard(cmd, customerId, account);
-            cardLast4 = card.last4();
-            moveTo("RUNNING", "CARD_ISSUED");
+            // Sagas started before the cards switch existed always issued a card; keep them replaying the same way.
+            int cardsSwitch = Workflow.getVersion(CARDS_SWITCH, Workflow.DEFAULT_VERSION, 1);
+            if (cardsSwitch == Workflow.DEFAULT_VERSION || cmd.wantsDebitCard()) {
+                CardDetails card = activities.issueCard(cmd, customerId, account);
+                cardLast4 = card.last4();
+                moveTo("RUNNING", "CARD_ISSUED");
+            }
             activities.setCustomerStatus(cmd, customerId, "ACTIVE", "Onboarding completed");
             step = "ACTIVE";
             return end("COMPLETED");

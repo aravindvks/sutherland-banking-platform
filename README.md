@@ -149,9 +149,14 @@ A bank gets only the modules it runs. One list decides it, in the build, the dep
 | Module | Can be left out | What leaving it out removes |
 | --- | --- | --- |
 | onboarding, payments, compliance | No: every bank opens accounts, moves money and screens customers | |
-| cards | Yes | Debit card screen and controls, their BFF routes and the card-controls saga (onboarding still issues the card) |
+| cards | Yes | Debit card screen and controls, their BFF routes, the card-controls saga and the debit card at onboarding (the account opens without one) |
 | creditcards | Yes | Credit card screens, routes, sagas, the Control Room's underwriting panel and the credit-adapter deployment |
 | recon | Yes | The reconciliation panel and routes, and the recon-service deployment |
+
+With neither card module (`cards`, `creditcards`), Helm also leaves out the thredd-adapter, the ehi-responder and the
+EHI load balancer: a bank without cards, such as a corporate bank, does not need Thredd at all. Onboarding decides
+whether to issue a debit card when the saga starts (from the modules registered in the orchestrator); sagas started
+before this switch existed keep issuing one (Temporal version marker `debit-card-follows-cards-module`).
 
 ```
 PBP_MODULES=onboarding,payments,compliance,cards,recon make up      # local stack without credit cards ("Bank A")
@@ -170,12 +175,17 @@ CI builds and tests five banks on every change, each from its own build:
 | --- | --- | --- |
 | 1, everything | all six | all eight, then each domain alone |
 | 2, no credit cards | onboarding, payments, compliance, cards, recon | all but credit |
-| 3, no debit cards | onboarding, payments, compliance, creditcards, recon | all but cards |
+| 3, corporate (no cards) | onboarding, payments, compliance, recon | all but cards and credit; onboarding must issue no card |
 | 4, no reconciliation | onboarding, payments, compliance, cards, creditcards | all but recon |
 | 5, core only | onboarding, payments, compliance | onboarding, payments, compliance, platform, observability |
 
 `scripts/smoke.sh` reads `PBP_MODULES`: it runs only the domains of modules that are on, and checks that every module
-that is off has no routes (404) and is missing from both apps' `/v1/modules`. The chart check renders all five banks.
+that is off has no routes (404) and is missing from both apps' `/v1/modules`. Checks that need a debit card (card
+taps during a sanctions freeze, card settlements in reconciliation) run only when `cards` is on. The chart check
+renders all five banks and checks which services each one deploys.
+
+Locally, Docker Compose still starts every service whatever `PBP_MODULES` says; only the jars and the screens follow
+the list. A cloud deployment follows it fully through Helm.
 
 ## Observability (LLD section 15)
 

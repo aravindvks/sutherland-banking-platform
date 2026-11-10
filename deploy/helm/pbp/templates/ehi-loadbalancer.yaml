@@ -1,4 +1,4 @@
-{{- if .Values.ehiLoadBalancer.enabled }}
+{{- if and .Values.ehiLoadBalancer.enabled (or (has "cards" .Values.modules) (has "creditcards" .Values.modules)) }}
 # Dedicated public listener for Thredd's EHI calls (HLD: separate path, not API Gateway).
 # OCI and AWS: TLS terminates at this load balancer and only Thredd's ranges may connect (WAF attached by
 # Terraform on OCI). Azure: internal, behind the Application Gateway's TLS listener and WAF (infra/terraform/azure).
