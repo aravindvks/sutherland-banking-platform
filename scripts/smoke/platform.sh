@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Smoke test for the platform domain. Platform: web app, live push, outbox relay, login and roles.
+# Sourced by scripts/smoke.sh (run: scripts/smoke.sh platform).
+smoke_platform() {
+fx_priya
+step "Web app: served by nginx, talking to the BFF"
+curl -sf "$WEB/" | grep -q "Sutherland Banking Platform" && pass "Web app is up at $WEB" || fail "Web app not served at $WEB"
+me=$(curl -sf "$WEB/v1/me" -H "$PRIYA_H")
+echo "$me" | grep -q '"accountId":"ACC-5501"' && pass "Home screen data through the web app: $(echo "$me" | head -c 160)…" \
+  || fail "Unexpected /v1/me through the web app: $me"
+step "Live push: the app's event stream receives Priya's incoming payment as it happens"
+EVENTS=$(mktemp)
+curl -sN --max-time 20 "$WEB/v1/events?customerId=$CUSTOMER${PRIYA_TOKEN:+&access_token=$PRIYA_TOKEN}" > "$EVENTS" &
+CURL_PID=$!
+sleep 3
+curl -sf -X POST "$SIM/essence/v1/sim/inbound" -H 'Content-Type: application/json' \
+  -d '{"creditAccountId":"ACC-5501","amount":"1.00","debtorName":"Live Push Test","reference":"SSE"}' >/dev/null
+for _ in $(seq 1 15); do grep -q "payment.received" "$EVENTS" && break; sleep 1; done
+kill $CURL_PID 2>/dev/null || true
+wait $CURL_PID 2>/dev/null || true
+grep -q "payment.received" "$EVENTS" && pass "Pushed over Server-Sent Events: $(grep -o '"type":"payment.received"[^}]*' "$EVENTS" | head -1 | head -c 120)…" \
+  || fail "No payment.received event on the stream: $(head -c 400 "$EVENTS")"
+step "Outbox relay: every event above travelled through service outbox tables and Debezium"
+st=$(curl -sf "$CONNECT/connectors/pbp-outbox/status" || true)
+if [ -n "$st" ]; then
+  echo "$st" | grep -q '"state":"RUNNING"' && ! echo "$st" | grep -q '"state":"FAILED"' \
+    && pass "Debezium outbox connector RUNNING (bff, orchestration, mapping, ehi outboxes)" || fail "Connector not healthy: $st"
+else
+  echo "  SKIP Kafka Connect not reachable at $CONNECT (services are in direct mode)"
+fi
+if [ "$AUTH" = 1 ]; then fx_asha; fi
+if [ "$AUTH" = 1 ]; then
+  step "Login: no token is refused; a view-only staff login cannot decide reviews"
+  code=$(curl -s -o /dev/null -w '%{http_code}' "$BFF/v1/me")
+  [ "$code" = "401" ] && pass "No token → 401" || fail "Expected 401 without a token, got $code"
+  code=$(curl -s -o /dev/null -w '%{http_code}' "$BFF/v1/staff/queue" -H "Authorization: Bearer $PRIYA_TOKEN")
+  [ "$code" = "403" ] && pass "Customer token on the staff API → 403" || fail "Expected 403 for a customer on /v1/staff, got $code"
+  code=$(curl -s -o /dev/null -w '%{http_code}' "$BFF/v1/staff/queue" -H "Authorization: Bearer $OPS_TOKEN")
+  [ "$code" = "200" ] && pass "Staff role can view the Control Room" || fail "Expected 200 for ops on the queue, got $code"
+  code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BFF/v1/staff/recon/runs" -H "Authorization: Bearer $OPS_TOKEN")
+  [ "$code" = "403" ] && pass "Staff without compliance cannot run reconciliation → 403" || fail "Expected 403 for ops, got $code"
+  me=$(curl -sf "$BFF/v1/me" -H "Authorization: Bearer $ASHA_TOKEN")
+  echo "$me" | grep -q "\"customerId\":\"$ASHA\"" && pass "Login 'asha' was linked to her customer when sign-up completed" \
+    || fail "Login asha not linked to $ASHA: $me"
+fi
+}

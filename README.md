@@ -80,7 +80,8 @@ Prerequisites: JDK 21, Docker Desktop with Compose v2, `make`. Gradle 8.10 must 
 
 ```bash
 make up       # builds all jars, starts infrastructure + services + vendor simulator
-make smoke    # end-to-end check of every flow, including traces, metrics and logs (32 steps)
+make smoke    # end-to-end check of every flow, including traces, metrics and logs
+./scripts/smoke.sh credit recon   # only some domains; each sets up what it needs
 make down     # stop (keeps data);  make clean  removes data too
 ```
 
@@ -105,6 +106,8 @@ Infrastructure only, for running services from the IDE: `make infra`.
 | Kafka | localhost:9092 |
 
 ## What the smoke test proves
+
+The checks are grouped by domain, one file each in `scripts/smoke/`: onboarding, payments, cards, compliance, recon, credit, platform and observability. `scripts/smoke.sh` runs them all in that order; `scripts/smoke.sh <domain>…` runs only those, and each domain sets up what it needs through the fixtures in `scripts/smoke/lib.sh` (Priya, Asha, a payment, a settled card payment). CI runs the whole set, then every domain alone. The checks are the ones below; the step numbers printed during a run follow the domain order, so they differ from this list.
 
 1. Priya's master customer record linked to her Essence party and account
 2. Card tap approved through the EHI responder with an Essence hold

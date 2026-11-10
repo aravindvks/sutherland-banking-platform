@@ -135,6 +135,17 @@ jobs:
           set -o pipefail
           ./scripts/smoke.sh 2>&1 | tee smoke.log
 
+      # Every domain must prove itself alone (phase A, "every domain proves itself alone"): run each on its own,
+      # setting up only what it needs through the fixtures in scripts/smoke/lib.sh.
+      - name: Smoke test, each domain alone
+        shell: bash
+        run: |
+          set -o pipefail
+          for d in onboarding payments cards compliance recon credit platform observability; do
+            echo "==== $d alone ====" | tee -a smoke.log
+            ./scripts/smoke.sh "$d" 2>&1 | tee -a smoke.log
+          done
+
       - name: Observability stack status
         if: always()
         run: |
