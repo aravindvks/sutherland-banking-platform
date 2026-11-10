@@ -3,17 +3,23 @@
 # Sourced by scripts/smoke.sh (run: scripts/smoke.sh compliance).
 smoke_compliance() {
 fx_asha_funded
-step "Sanctions hit: Atfinity rescreening freezes Asha and her next tap is declined"
+step "Sanctions hit: Atfinity rescreening freezes Asha$(module_on cards && echo " and her next tap is declined")"
 CASE=$(curl -sf "$MAPPING/v1/customers/$ASHA/graph" | grep -o '"entityType":"KYC_CASE","externalId":"[^"]*"' | sed 's/.*"externalId":"\([^"]*\)"/\1/')
 curl -sf -X POST "$SIM/atfinity/v1/sim/cases/$CASE/rescreen-hit" >/dev/null
+if module_on cards; then
+  for _ in $(seq 1 15); do
+    tap=$(curl -sf -X POST "$SIM/thredd/v1/sim/card-tap" -H 'Content-Type: application/json' \
+      -d "{\"token\":\"$ASHA_CARD\",\"amount\":\"1.00\",\"merchant\":\"Corner Shop\"}")
+    echo "$tap" | grep -q '"reason":"CUSTOMER_FROZEN"' && break
+    sleep 2
+  done
+  echo "$tap" | grep -q '"reason":"CUSTOMER_FROZEN"' && pass "Declined: CUSTOMER_FROZEN" || fail "Expected CUSTOMER_FROZEN, got $tap"
+fi
 for _ in $(seq 1 15); do
-  tap=$(curl -sf -X POST "$SIM/thredd/v1/sim/card-tap" -H 'Content-Type: application/json' \
-    -d "{\"token\":\"$ASHA_CARD\",\"amount\":\"1.00\",\"merchant\":\"Corner Shop\"}")
-  echo "$tap" | grep -q '"reason":"CUSTOMER_FROZEN"' && break
-  sleep 2
+  status=$(curl -sf "$MAPPING/v1/customers/$ASHA" | field status)
+  [ "$status" = "FROZEN" ] && break
+  sleep 1
 done
-echo "$tap" | grep -q '"reason":"CUSTOMER_FROZEN"' && pass "Declined: CUSTOMER_FROZEN" || fail "Expected CUSTOMER_FROZEN, got $tap"
-status=$(curl -sf "$MAPPING/v1/customers/$ASHA" | field status)
 [ "$status" = "FROZEN" ] && pass "Asha's customer status is FROZEN" || fail "Expected FROZEN, got $status"
 step "Inbound payments are recorded: COMPLETED for an active customer, FLAGGED once frozen"
 list=$(curl -sf "$BFF/v1/payments" -H "$ASHA_H")
@@ -45,11 +51,13 @@ for _ in $(seq 1 15); do
   sleep 1
 done
 echo "$list" | grep -q '"status":"FLAGGED"' && fail "Held payment was not released: $list" || pass "Held £5 released (no FLAGGED payments left)"
-for _ in $(seq 1 10); do
-  tap=$(curl -sf -X POST "$SIM/thredd/v1/sim/card-tap" -H 'Content-Type: application/json' \
-    -d "{\"token\":\"$ASHA_CARD\",\"amount\":\"1.00\",\"merchant\":\"Corner Shop\"}")
-  echo "$tap" | grep -q '"decision":"APPROVE"' && break
-  sleep 2
-done
-echo "$tap" | grep -q '"decision":"APPROVE"' && pass "Asha's card works again" || fail "Expected APPROVE after CLEAR, got $tap"
+if module_on cards; then
+  for _ in $(seq 1 10); do
+    tap=$(curl -sf -X POST "$SIM/thredd/v1/sim/card-tap" -H 'Content-Type: application/json' \
+      -d "{\"token\":\"$ASHA_CARD\",\"amount\":\"1.00\",\"merchant\":\"Corner Shop\"}")
+    echo "$tap" | grep -q '"decision":"APPROVE"' && break
+    sleep 2
+  done
+  echo "$tap" | grep -q '"decision":"APPROVE"' && pass "Asha's card works again" || fail "Expected APPROVE after CLEAR, got $tap"
+fi
 }

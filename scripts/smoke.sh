@@ -15,6 +15,8 @@ ALL="onboarding payments cards compliance recon credit platform observability"
 # not tested. cards, credit and recon belong to switchable modules; the rest are always on.
 MODULES=${PBP_MODULES:-onboarding,payments,compliance,cards,creditcards,recon}
 module_of() { case "$1" in cards) echo cards ;; credit) echo creditcards ;; recon) echo recon ;; *) echo "" ;; esac; }
+# True when a module is in this build (e.g. module_on cards): fixtures and checks that need it run only then.
+module_on() { case ",$MODULES," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 is_on() { local m; m=$(module_of "$1"); [ -z "$m" ] || case ",$MODULES," in *",$m,"*) return 0 ;; *) return 1 ;; esac; }
 if [ $# -gt 0 ]; then DOMAINS="$*"; else DOMAINS=""; for d in $ALL; do is_on "$d" && DOMAINS="$DOMAINS $d"; done; DOMAINS=${DOMAINS# }; fi
 for d in $DOMAINS; do

@@ -1,9 +1,12 @@
 {{- /* One Deployment, Service, HPA and PDB per enabled service (LLD section 13). */ -}}
-{{- /* A service that belongs to a module is deployed only when that module is switched on (values: modules). */ -}}
-{{- $moduleOf := dict "credit-adapter" "creditcards" "recon-service" "recon" }}
+{{- /* A service that belongs to modules is deployed only when one of them is switched on (values: modules). */ -}}
+{{- /* Thredd's adapter and the EHI responder serve both card modules; a bank without cards needs neither. */ -}}
+{{- $moduleOf := dict "credit-adapter" "creditcards" "recon-service" "recon" "thredd-adapter" "cards,creditcards" "ehi-responder" "cards,creditcards" }}
 {{- range $name, $s := .Values.services }}
-{{- $module := get $moduleOf $name }}
-{{- if and (ne (toString $s.enabled) "false") (or (not $module) (has $module $.Values.modules)) }}
+{{- $needs := get $moduleOf $name }}
+{{- $on := not $needs }}
+{{- range $m := splitList "," $needs }}{{- if has $m $.Values.modules }}{{- $on = true }}{{- end }}{{- end }}
+{{- if and (ne (toString $s.enabled) "false") $on }}
 ---
 apiVersion: apps/v1
 kind: Deployment

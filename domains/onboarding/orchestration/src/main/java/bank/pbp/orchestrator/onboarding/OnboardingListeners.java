@@ -8,10 +8,12 @@ import bank.pbp.orchestrator.compliance.ComplianceWorkflow;
 import bank.pbp.orchestrator.onboarding.OnboardingTypes.OnboardingCommand;
 import bank.pbp.orchestrator.onboarding.OnboardingTypes.OnboardingStatus;
 import bank.pbp.orchestrator.temporal.TaskQueues;
+import bank.pbp.orchestrator.temporal.WorkerRegistration;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowExecutionAlreadyStarted;
 import io.temporal.client.WorkflowNotFoundException;
 import io.temporal.client.WorkflowOptions;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -34,11 +36,16 @@ public class OnboardingListeners {
     private final WorkflowClient temporal;
     private final EventPublisher events;
     private final JdbcClient jdbc;
+    /** True when the debit cards module is in this build: only then does onboarding issue a Thredd debit card. */
+    private final boolean debitCards;
 
-    public OnboardingListeners(WorkflowClient temporal, EventPublisher events, JdbcClient jdbc) {
+    public OnboardingListeners(WorkflowClient temporal, EventPublisher events, JdbcClient jdbc,
+                               List<WorkerRegistration> modules) {
         this.temporal = temporal;
         this.events = events;
         this.jdbc = jdbc;
+        // Read from the registered modules rather than importing the cards domain (domains stay independent).
+        this.debitCards = modules.stream().anyMatch(m -> "cards".equals(m.domain()));
     }
 
     @KafkaListener(topics = Topics.ONBOARDING_COMMANDS, groupId = "orchestrator-onboarding")
@@ -49,7 +56,7 @@ public class OnboardingListeners {
         }
         Map<String, Object> d = e.data();
         OnboardingCommand cmd = new OnboardingCommand(str(d.get("onboardingId")), e.correlationId(),
-                str(d.get("customerType")), str(d.get("name")), str(d.get("email")));
+                str(d.get("customerType")), str(d.get("name")), str(d.get("email")), debitCards);
         OnboardingWorkflow wf = temporal.newWorkflowStub(OnboardingWorkflow.class, WorkflowOptions.newBuilder()
                 .setTaskQueue(TaskQueues.ONBOARDING)
                 .setWorkflowId("onboarding-" + cmd.onboardingId())

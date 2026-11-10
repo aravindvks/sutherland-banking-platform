@@ -6,8 +6,16 @@ public final class OnboardingTypes {
     private OnboardingTypes() {
     }
 
+    /**
+     * {@code issueDebitCard}: whether this bank runs the debit cards module (set when the saga starts, so a running
+     * saga never changes its mind). Null on commands from before the switch existed, which means issue a card.
+     */
     public record OnboardingCommand(String onboardingId, String correlationId, String customerType, String name,
-                                    String email) {
+                                    String email, Boolean issueDebitCard) {
+
+        public boolean wantsDebitCard() {
+            return !Boolean.FALSE.equals(issueDebitCard);
+        }
     }
 
     /** What the customer's app shows while onboarding runs and after it ends. */
