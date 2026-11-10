@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 public class CardsWorkers {
 
     @Bean
-    WorkerRegistration cardsWorkers(CardActivitiesImpl cardActivities) {
+    WorkerRegistration cardsWorkerRegistration(CardActivitiesImpl cardActivities) {
         return new WorkerRegistration("cards", TaskQueues.CARDS,
                 List.of(CardControlsWorkflow.Impl.class), List.of(cardActivities));
     }

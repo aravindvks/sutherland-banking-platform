@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
 public class PaymentsWorkers {
 
     @Bean
-    WorkerRegistration paymentsWorkers(PaymentActivitiesImpl paymentActivities, InboundActivitiesImpl inboundActivities,
+    WorkerRegistration paymentsWorkerRegistration(PaymentActivitiesImpl paymentActivities, InboundActivitiesImpl inboundActivities,
                                        ScheduleActivitiesImpl scheduleActivities,
                                        DirectDebitActivitiesImpl directDebitActivities) {
         return new WorkerRegistration("payments", TaskQueues.PAYMENTS,

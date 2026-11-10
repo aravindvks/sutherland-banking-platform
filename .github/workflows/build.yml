@@ -169,12 +169,16 @@ jobs:
           docker compose -f infra/compose/docker-compose.yml --profile apps logs --no-color > stack.log 2>&1 || true
           {
             cat ps.txt
-            echo "---- smoke ----"; cat smoke.log 2>/dev/null
+            echo "---- smoke ----"; cat smoke.log 2>/dev/null || echo "(the smoke test did not run)"
             echo "---- errors ----"
             grep -E "ERROR|Exception|Caused by|FAIL|refused|denied" stack.log | grep -v "WARN" | head -80
           } > summary.txt
           # Service errors first, one annotation each, so they are not cut off by the long summary.
           grep -E "Exception|Caused by| ERROR " stack.log | grep -v WARN | sed 's/\x1b\[[0-9;]*m//g' | awk '!seen[$0]++' \
             | head -8 | cut -c1-700 | sed 's/^/::error title=Service error::/' || true
+          # A service that never became healthy: show the end of its log in the step output.
+          for s in $(docker compose -f infra/compose/docker-compose.yml --profile apps ps -a --format '{{.Service}} {{.Status}}' 2>/dev/null | grep -viE ' Up .*healthy|Up [0-9]+ (seconds|minutes|hours)$' | awk '{print $1}'); do
+            echo "---- $s (last 60 lines) ----"; docker compose -f infra/compose/docker-compose.yml --profile apps logs --no-color --tail 60 "$s" 2>&1 || true
+          done
           msg=$(sed -e 's/%/%25/g' summary.txt | cut -c1-400 | awk '{printf "%s%%0A", $0}')
           echo "::error title=End-to-end failed::${msg}"

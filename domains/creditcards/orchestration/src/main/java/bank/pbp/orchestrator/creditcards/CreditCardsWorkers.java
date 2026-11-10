@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 public class CreditCardsWorkers {
 
     @Bean
-    WorkerRegistration creditCardsWorkers(CreditCardActivitiesImpl creditCardActivities) {
+    WorkerRegistration creditCardsWorkerRegistration(CreditCardActivitiesImpl creditCardActivities) {
         return new WorkerRegistration("creditcards", TaskQueues.CARDS,
                 List.of(CreditCardWorkflows.ApplicationImpl.class, CreditCardWorkflows.RepaymentImpl.class,
                         CreditCardWorkflows.StatementImpl.class, CreditCardWorkflows.WithdrawalImpl.class),

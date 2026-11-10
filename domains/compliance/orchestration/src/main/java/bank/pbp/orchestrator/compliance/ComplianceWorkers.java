@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 public class ComplianceWorkers {
 
     @Bean
-    WorkerRegistration complianceWorkers(ComplianceActivitiesImpl complianceActivities) {
+    WorkerRegistration complianceWorkerRegistration(ComplianceActivitiesImpl complianceActivities) {
         return new WorkerRegistration("compliance", TaskQueues.COMPLIANCE,
                 List.of(ComplianceWorkflow.Impl.class), List.of(complianceActivities));
     }

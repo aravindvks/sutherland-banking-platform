@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 public class OnboardingWorkers {
 
     @Bean
-    WorkerRegistration onboardingWorkers(OnboardingActivitiesImpl onboardingActivities) {
+    WorkerRegistration onboardingWorkerRegistration(OnboardingActivitiesImpl onboardingActivities) {
         return new WorkerRegistration("onboarding", TaskQueues.ONBOARDING,
                 List.of(OnboardingWorkflowImpl.class), List.of(onboardingActivities));
     }
