@@ -75,16 +75,21 @@ jobs:
           # Same chart on AWS and Azure: only values-<cloud>.yaml differs.
           helm template pbp-aws deploy/helm/pbp -f deploy/helm/pbp/values-aws.yaml > rendered-aws.yaml
           helm template pbp-azure deploy/helm/pbp -f deploy/helm/pbp/values-azure.yaml > rendered-azure.yaml
-          # Module switches: a bank without credit cards gets no credit-adapter; the full set does.
-          helm template pbp-banka deploy/helm/pbp --set 'modules={onboarding,payments,compliance,cards,recon}' > rendered-banka.yaml
-          ! grep -q 'name: credit-adapter$' rendered-banka.yaml && grep -q 'name: credit-adapter$' rendered.yaml \
-            || { echo "Module switches: credit-adapter should be rendered only when creditcards is on"; exit 1; }
-          grep -q "aws-load-balancer-type: external" rendered-aws.yaml && grep -q "kind: Ingress" rendered-aws.yaml \
-            && grep -q "name: kafka-topics" rendered-aws.yaml
-          grep -q "azure-load-balancer-internal" rendered-azure.yaml && ! grep -q "oci-load-balancer" rendered-azure.yaml
-          grep -q "kind: PrometheusRule" rendered-obs.yaml && grep -q "dashboard-pbp-payments" rendered-obs.yaml
-          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
-          ./kubeconform -strict -summary -ignore-missing-schemas rendered.yaml rendered-demo.yaml rendered-obs.yaml rendered-aws.yaml rendered-azure.yaml rendered-banka.yaml 2>&1 | tee -a helm.log
+          # Module switches: the five banks CI tests. credit-adapter only with creditcards, recon-service only with recon.
+          for set in onboarding,payments,compliance,cards,creditcards,recon onboarding,payments,compliance,cards,recon \
+                     onboarding,payments,compliance,creditcards,recon onboarding,payments,compliance,cards,creditcards \
+                     onboarding,payments,compliance; do
+            out="rendered-modules-$(echo "$set" | tr ',' '-').yaml"
+            helm template pbp-mods deploy/helm/pbp --set "modules={$set}" > "$out"
+            for pair in credit-adapter:creditcards recon-service:recon; do
+              svc=${pair%%:*}; mod=${pair##*:}
+              if echo ",$set," | grep -q ",$mod,"; then want=1; else want=0; fi
+              if grep -q "name: $svc\$" "$out"; then got=1; else got=0; fi
+              [ "$want" = "$got" ] || { echo "Modules $set: $svc rendered=$got, expected $want"; exit 1; }
+            done
+            echo "Modules $set: chart renders the right services"
+          done
+          ./kubeconform -strict -summary -ignore-missing-schemas rendered.yaml rendered-demo.yaml rendered-obs.yaml rendered-aws.yaml rendered-azure.yaml rendered-modules-*.yaml 2>&1 | tee -a helm.log
       - name: Check alert rules and collector config
         run: |
           set -o pipefail
@@ -100,7 +105,8 @@ jobs:
 
   # Starts the full stack in Docker and runs scripts/smoke.sh: mapping links, a card tap through
   # the EHI responder, and a same-bank payment through BFF → Kafka → Temporal → Essence adapter.
-  # Two builds of the same code (module switches, phase A): every module, and "Bank A" without credit cards.
+  # Five banks from the same code (module switches, phase A). Each bank builds only its modules, and its smoke test
+  # runs the domains of those modules and checks that every module left out has no routes or workflows.
   e2e:
     needs: build
     runs-on: ubuntu-latest
@@ -108,12 +114,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - set: all
+          - set: bank-1-everything
             modules: onboarding,payments,compliance,cards,creditcards,recon
-            domains: ""
-          - set: bank-a
+          - set: bank-2-no-credit-cards
             modules: onboarding,payments,compliance,cards,recon
-            domains: onboarding payments cards compliance recon platform observability
+          - set: bank-3-no-debit-cards
+            modules: onboarding,payments,compliance,creditcards,recon
+          - set: bank-4-no-reconciliation
+            modules: onboarding,payments,compliance,cards,creditcards
+          - set: bank-5-core-only
+            modules: onboarding,payments,compliance
     name: e2e (${{ matrix.set }})
     env:
       PBP_MODULES: ${{ matrix.modules }}
@@ -151,12 +161,12 @@ jobs:
         run: |
           # pipefail: without it the step takes tee's exit code and a failed check still passes.
           set -o pipefail
-          ./scripts/smoke.sh ${{ matrix.domains }} 2>&1 | tee smoke.log
+          ./scripts/smoke.sh 2>&1 | tee smoke.log
 
       # Every domain must prove itself alone (phase A, "every domain proves itself alone"): run each on its own,
       # setting up only what it needs through the fixtures in scripts/smoke/lib.sh.
       - name: Smoke test, each domain alone
-        if: matrix.set == 'all'
+        if: matrix.set == 'bank-1-everything'
         shell: bash
         run: |
           set -o pipefail

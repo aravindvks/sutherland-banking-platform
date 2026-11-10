@@ -58,10 +58,13 @@ for m in onboarding payments compliance cards creditcards recon; do
   fi
 done
 pass "BFF $bm, orchestrator $om"
-case ",$want," in
-  *",creditcards,"*) ;;
-  *) code=$(curl -s -o /dev/null -w '%{http_code}' "$BFF/v1/credit-cards" -H "$PRIYA_H")
-     [ "$code" = 404 ] && pass "Credit cards switched off: no route for /v1/credit-cards (404)" \
-       || fail "Credit cards are off but /v1/credit-cards answered $code" ;;
-esac
+# A module that is off has no routes at all: each answers 404.
+off_route() {  # module, method, path, header, label
+  case ",$want," in *",$1,"*) return 0 ;; esac
+  code=$(curl -s -o /dev/null -w '%{http_code}' -X "$2" "$BFF$3" -H "$4" -H 'Content-Type: application/json' -d '{}')
+  [ "$code" = 404 ] && pass "$5 switched off: no route for $2 $3 (404)" || fail "$5 is off but $2 $3 answered $code"
+}
+off_route creditcards GET /v1/credit-cards "$PRIYA_H" "Credit cards"
+off_route cards PUT /v1/cards/controls "$PRIYA_H" "Debit card controls"
+off_route recon GET /v1/staff/recon/runs "$STAFF_H" "Reconciliation"
 }

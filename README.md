@@ -162,8 +162,20 @@ helm upgrade --install ... --set 'modules={onboarding,payments,compliance,cards,
 The deploy workflow takes the list as an input and uses it for both the jars and Helm. A module left out is not in
 the jars at all: its routes answer 404 and its workflows are never registered. The BFF and the orchestrator list
 what they run at `GET /v1/modules`; the web app reads the BFF's list and shows only those tabs, Control Room panels
-and demo buttons. The database schema is the same for every bank (a left-out module's tables stay empty). CI builds
-and tests two sets on every change: every module, and Bank A without credit cards.
+and demo buttons. The database schema is the same for every bank (a left-out module's tables stay empty).
+
+CI builds and tests five banks on every change, each from its own build:
+
+| Bank | Modules | Smoke domains |
+| --- | --- | --- |
+| 1, everything | all six | all eight, then each domain alone |
+| 2, no credit cards | onboarding, payments, compliance, cards, recon | all but credit |
+| 3, no debit cards | onboarding, payments, compliance, creditcards, recon | all but cards |
+| 4, no reconciliation | onboarding, payments, compliance, cards, creditcards | all but recon |
+| 5, core only | onboarding, payments, compliance | onboarding, payments, compliance, platform, observability |
+
+`scripts/smoke.sh` reads `PBP_MODULES`: it runs only the domains of modules that are on, and checks that every module
+that is off has no routes (404) and is missing from both apps' `/v1/modules`. The chart check renders all five banks.
 
 ## Observability (LLD section 15)
 
