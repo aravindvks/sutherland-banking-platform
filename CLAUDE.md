@@ -1,6 +1,6 @@
 # Working in this repository
 
-- Product name: **Sutherland Banking Platform**. UK only, no AI layer. Saga engine: Temporal.
+- Product name: **Sutherland Banking Platform**. UK market today (`markets/uk`); other markets are designed in `docs/design/market-packs.md`, not built. Country rules belong in the market pack, not in domain code. No AI layer. Saga engine: Temporal.
 - Stack: Java 21, Spring Boot 3.3, Gradle (Groovy DSL), Temporal Java SDK 1.25, PostgreSQL 16, Kafka 3.8.
 - Follow the LLD for names, endpoints, topics, tables and error codes. If the code must differ, record it under "Corrections to the LLD" in README.md.
 - Every service depends on `libs/platform-common` for correlation IDs, problem+json errors and the event envelope. Do not re-implement these per service.

@@ -191,6 +191,23 @@ renders all five banks and checks which services each one deploys.
 Locally, Docker Compose still starts every service whatever `PBP_MODULES` says; only the jars and the screens follow
 the list. A cloud deployment follows it fully through Helm.
 
+## Market packs (one country's rules per build)
+
+Design: `docs/design/market-packs.md`. A build carries one market pack, chosen like the module switches:
+
+```bash
+./gradlew bootJar -Pmarket=uk        # or PBP_MARKET=uk; uk is the default and, so far, the only market
+```
+
+The pack (`markets/<code>`, behind `bank.pbp.common.market.MarketPack`) holds the market's currency, local time,
+business calendar, account identifiers, payment schemes and their hours, limits and fees, name check and Direct
+Debit scheme. Deploy with the same `PBP_MARKET`: a service whose built-in pack differs refuses to start.
+
+Stage 1 moves today's UK rules into `markets/uk` step by step, with no change in behaviour. **Step 1 (this
+release)**: the interface and the UK pack exist and are built into the orchestrator and the BFF, but nothing uses
+them yet. Test `ChapsWindowParityTest` proves the pack's CHAPS hours answer exactly as `ChapsWindow` does.
+The US, Colombia, Jamaica and UAE packs are designed, not built.
+
 ## Observability (LLD section 15)
 
 One standard, set once in `libs/platform-common`, so no service wires it itself:
@@ -307,4 +324,4 @@ that class is written. Nothing outside the adapter changes.
 - **Observability as built differs from LLD section 15** (the LLD now has an "As built" part). Metric names follow Micrometer (`pbp_*`, `http_*_requests_seconds`) instead of the planned `ehi_decision_latency_ms` and friends; logs are plain text with trace and correlation IDs rather than JSON. Every outbox table has a `traceparent` column, and the Debezium connector copies `traceparent` and `created_at` into the Kafka headers `traceparent` and `occurredAt`. The orchestration schema adds `flow_metrics_watermark` (orchestration `V5__flow_metrics_watermark.sql`), so replicas count each status change once. The LLD's log format `[COR-…]` becomes `[service,trace=…,span=…,cid=COR-…]`.
 - **Credit cards (added to the LLD in this change).** Tables `credit_application`, `credit_account`, `credit_statement`, `credit_repayment` (orchestration `V6__credit_cards.sql`); `auth_log.product` (ehi `V4__auth_log_product.sql`) so Essence reconciliation reads debit cards only; mapping entity type `CREDIT_ACCOUNT` (system THREDD), the parent of a credit card's `CARD` ref; card cache field `product`; commands `creditcard.apply|accept|repay|withdraw` on `card-commands`; events `creditcard.*` on `card-events`; new service `credit-adapter`; error codes `CARD-CREDIT-001` (over the limit), `-002` (account not open), `-003` (balance outstanding), `-005` (application not referred) and decline reason `CREDIT_LIMIT_EXCEEDED`. A credit card's daily spending control defaults to £5,000; its limit is Thredd's.
 - **Credit card reconciliation against Thredd is not built.** Credit card presentments post to Thredd, not Essence, so the CARDS run leaves them out; repayments move money inside Essence under one reference and net to zero there.
-
+- **The LLD is UK-only; the platform now has market packs** (`docs/design/market-packs.md`). UK rules move into `markets/uk` in Stage 1 with no change in behaviour; other markets are designed, not built.

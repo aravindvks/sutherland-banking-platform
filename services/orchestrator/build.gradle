@@ -7,6 +7,9 @@ dependencies {
         implementation project(":domains:${m}-orchestration")
     }
 
+    // The market pack this build is for (rootProject.enabledMarket; docs/design/market-packs.md).
+    implementation project(":markets:${rootProject.enabledMarket}")
+
     implementation "io.temporal:temporal-sdk:${rootProject.temporalVersion}"
     // Observability (LLD section 15): workflow and activity spans join the caller's trace.
     implementation "io.temporal:temporal-opentracing:${rootProject.temporalVersion}"

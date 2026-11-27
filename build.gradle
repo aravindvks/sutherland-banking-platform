@@ -29,6 +29,18 @@ ext.enabledModules = {
     allModules.findAll { it in list }
 }()
 
+// Market pack (docs/design/market-packs.md). A build carries exactly one country's rules:
+//   ./gradlew bootJar -Pmarket=uk      (or PBP_MARKET in the environment; default uk)
+// Deploy with the same PBP_MARKET: a service whose pack differs refuses to start (MarketGuard).
+ext.allMarkets = ['uk']
+ext.enabledMarket = {
+    String chosen = (findProperty('market') ?: System.getenv('PBP_MARKET') ?: 'uk').trim().toLowerCase()
+    if (!(chosen in allMarkets)) {
+        throw new GradleException("Unknown market '${chosen}'. Markets built so far: ${allMarkets.join(', ')}")
+    }
+    chosen
+}()
+
 allprojects {
     group = 'bank.pbp'
     version = '0.1.0-SNAPSHOT'
@@ -96,6 +108,16 @@ subprojects { sub ->
             api project(':libs:bff-core')
             implementation 'org.springframework.boot:spring-boot-starter-validation'
             implementation 'org.springframework.kafka:spring-kafka'
+            testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        }
+    }
+
+    // A market pack (markets/<code>): one country's rules behind bank.pbp.common.market.MarketPack.
+    if (sub.path.startsWith(':markets:')) {
+        apply plugin: 'java-library'
+
+        dependencies {
+            api project(':libs:platform-common')
             testImplementation 'org.springframework.boot:spring-boot-starter-test'
         }
     }
