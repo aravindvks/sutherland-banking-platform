@@ -44,15 +44,16 @@ import org.springframework.web.client.RestClient;
 @RequestMapping("/v1/schedules")
 public class ScheduleController {
 
-    private static final ZoneId UK = ZoneId.of("Europe/London");
-
     private final IdempotencyStore idempotency;
     private final EventPublisher events;
     private final RestClient orchestrator;
     private final Caller caller;
+    private final ZoneId zone;
 
     public ScheduleController(IdempotencyStore idempotency, EventPublisher events, Caller caller,
-                              RestClient.Builder builder, @Value("${pbp.services.orchestrator-url}") String url) {
+                              RestClient.Builder builder, @Value("${pbp.services.orchestrator-url}") String url,
+                              bank.pbp.common.market.MarketPack market) {
+        this.zone = market.zone();   // "today" in the market's local time (docs/design/market-packs.md)
         this.idempotency = idempotency;
         this.events = events;
         this.caller = caller;
@@ -71,7 +72,7 @@ public class ScheduleController {
                                                       @RequestHeader("Idempotency-Key") UUID idempotencyKey,
                                                       HttpServletRequest request) {
         UUID customerId = caller.customerId(request);
-        LocalDate today = LocalDate.now(UK);
+        LocalDate today = LocalDate.now(zone);
         LocalDate start = LocalDate.parse(body.startDate());
         if (start.isBefore(today)) {
             throw new PbpException("GEN-VALID-001", 400, "Request is not valid", "startDate cannot be in the past");
