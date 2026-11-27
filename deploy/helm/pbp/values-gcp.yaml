@@ -1,0 +1,41 @@
+# GCP cell (infra/terraform/gcp). Use with: helm upgrade --install pbp-dev . -f values-gcp.yaml
+# Fill the addresses and names from `terraform output`. Cluster add-ons: External Secrets Operator
+# (ClusterSecretStore "gcp-secret-manager" with Workload Identity, service account from Terraform), Temporal,
+# and the observability stack, exactly as on OCI. The GKE Ingress (templates/ingress-gcp.yaml) is the public
+# entry for web and EHI, with Cloud Armor and the certificate from Terraform.
+cloud: gcp
+
+image:
+  registry: europe-west2-docker.pkg.dev/PROJECT_ID/pbp   # terraform output registry
+  pullSecret: ""                                         # nodes pull from Artifact Registry with their service account
+
+config:
+  DB_HOST: "10.50.32.3"                                   # terraform output postgres_endpoint
+  KAFKA_BOOTSTRAP: "bootstrap.pbp-dev-kafka-xxxxxx.europe-west2.managedkafka.PROJECT_ID.cloud.goog:9092"  # terraform output kafka_bootstrap
+  SPRING_KAFKA_PROPERTIES_SECURITY_PROTOCOL: SASL_SSL
+  SPRING_KAFKA_PROPERTIES_SASL_MECHANISM: PLAIN
+  REDIS_HOST: "10.50.32.4"                                # terraform output cache_endpoint
+  SPRING_DATA_REDIS_PORT: "6378"                          # Memorystore's TLS port
+  SPRING_DATA_REDIS_SSL_ENABLED: "true"
+  # Memorystore's certificate is signed by a Google-managed CA that Java does not trust by default. The CA
+  # comes from Secret Manager (externalSecrets.extraKeys below) into this Spring SSL bundle.
+  SPRING_DATA_REDIS_SSL_BUNDLE: redis
+  # Login: Keycloak (in-cluster, brokering to Google Cloud Identity or the bank's directory) keeps the web app
+  # and the BFF unchanged.
+  KEYCLOAK_JWKS: "https://login.example.co.uk/realms/pbp/protocol/openid-connect/certs"
+  PBP_AUTH_ROLES_CLAIM: ""
+
+externalSecrets:
+  enabled: true
+  secretStore: gcp-secret-manager
+  extraKeys: [SPRING_SSL_BUNDLE_PEM_REDIS_TRUSTSTORE_CERTIFICATE]
+
+webInternalLoadBalancer: false   # the GKE Ingress reaches the pods directly (network endpoint groups)
+
+gcp:
+  webHost: bank-dev.example.co.uk
+  ehiHost: ehi-dev.example.co.uk
+  staticIpName: pbp-dev-web      # terraform output web_ip_name
+  certificateName: pbp-dev-web   # terraform output certificate_name
+  securityPolicy: pbp-dev-edge   # terraform output security_policy_name
+  sslPolicy: pbp-dev-tls         # terraform output ssl_policy_name

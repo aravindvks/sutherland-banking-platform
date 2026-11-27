@@ -53,10 +53,10 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
-      - name: Terraform format and validate (OCI, AWS, Azure)
+      - name: Terraform format and validate (OCI, Azure, AWS, GCP)
         run: |
           set -o pipefail
-          for cloud in oci aws azure; do
+          for cloud in oci azure aws gcp; do
             echo "== $cloud" | tee -a infra/terraform/tf.log
             ( cd infra/terraform/$cloud
               terraform fmt -check -recursive -diff >> ../tf.log 2>&1 || echo "terraform fmt ($cloud): style differences (not blocking)"
@@ -72,9 +72,11 @@ jobs:
           # Observability on: alert rules and dashboards packaged as the deploy workflow does (LLD section 15).
           mkdir -p deploy/helm/pbp/files && cp -r infra/observability deploy/helm/pbp/files/
           helm template pbp-obs deploy/helm/pbp --set observability.enabled=true > rendered-obs.yaml
-          # Same chart on AWS and Azure: only values-<cloud>.yaml differs.
+          # Same chart on Azure, AWS and GCP: only values-<cloud>.yaml differs.
           helm template pbp-aws deploy/helm/pbp -f deploy/helm/pbp/values-aws.yaml > rendered-aws.yaml
           helm template pbp-azure deploy/helm/pbp -f deploy/helm/pbp/values-azure.yaml > rendered-azure.yaml
+          helm template pbp-gcp deploy/helm/pbp -f deploy/helm/pbp/values-gcp.yaml > rendered-gcp.yaml
+          helm template pbp-gcp-nocards deploy/helm/pbp -f deploy/helm/pbp/values-gcp.yaml --set "modules={onboarding,payments,compliance}" > rendered-gcp-nocards.yaml
           # Module switches: the five banks CI tests. credit-adapter only with creditcards, recon-service only with recon,
           # thredd-adapter, ehi-responder and the EHI load balancer only with a card module (cards or creditcards).
           for set in onboarding,payments,compliance,cards,creditcards,recon onboarding,payments,compliance,cards,recon \
@@ -98,13 +100,18 @@ jobs:
           grep -q "aws-load-balancer-type: external" rendered-aws.yaml && grep -q "kind: Ingress" rendered-aws.yaml \
             && grep -q "name: kafka-topics" rendered-aws.yaml
           grep -q "azure-load-balancer-internal" rendered-azure.yaml && ! grep -q "oci-load-balancer" rendered-azure.yaml
+          # GCP: one GKE Ingress for web and EHI, NEG-backed services, no separate load balancers, the Redis CA from Secret Manager.
+          grep -q "kubernetes.io/ingress.class: gce" rendered-gcp.yaml && grep -q "kind: BackendConfig" rendered-gcp.yaml \
+            && grep -q "cloud.google.com/neg" rendered-gcp.yaml && grep -q "SPRING_SSL_BUNDLE_PEM_REDIS_TRUSTSTORE_CERTIFICATE" rendered-gcp.yaml \
+            && ! grep -q "type: LoadBalancer" rendered-gcp.yaml && ! grep -q "oci-load-balancer" rendered-gcp.yaml
+          ! grep -q "name: ehi-responder" rendered-gcp-nocards.yaml
           grep -q "kind: PrometheusRule" rendered-obs.yaml && grep -q "dashboard-pbp-payments" rendered-obs.yaml
           # Outbox relay: the connector is registered by a hook Job; on OCI Connect keeps its state in the Connect configuration's topics.
           grep -q "name: register-outbox-connector" rendered.yaml
           helm template pbp-oci deploy/helm/pbp --set connect.ociConnectHarnessId=ocid1.connectharness.test > rendered-oci-connect.yaml
           grep -q "ocid1.connectharness.test-offset" rendered-oci-connect.yaml
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
-          ./kubeconform -strict -summary -ignore-missing-schemas rendered.yaml rendered-demo.yaml rendered-obs.yaml rendered-aws.yaml rendered-azure.yaml rendered-modules-*.yaml 2>&1 | tee -a helm.log
+          ./kubeconform -strict -summary -ignore-missing-schemas rendered.yaml rendered-demo.yaml rendered-obs.yaml rendered-aws.yaml rendered-azure.yaml rendered-gcp.yaml rendered-gcp-nocards.yaml rendered-modules-*.yaml 2>&1 | tee -a helm.log
       - name: Check alert rules and collector config
         run: |
           set -o pipefail

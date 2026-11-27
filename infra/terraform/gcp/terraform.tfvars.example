@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (git-ignored). Secrets are better passed as TF_VAR_* environment variables.
+project_id = "my-bank-pbp-dev"
+region     = "europe-west2"
+env        = "dev"
+modules    = ["onboarding", "payments", "compliance", "cards", "creditcards", "recon"]
+
+# postgres_password = "..."   # TF_VAR_postgres_password
+# webhook_secret    = "..."   # TF_VAR_webhook_secret
+
+thredd_ehi_source_cidrs = []  # from Thredd; Cloud Armor admits only these to the EHI host name
+
+web_hostname = "bank-dev.example.co.uk"
+ehi_hostname = "ehi-dev.example.co.uk"
