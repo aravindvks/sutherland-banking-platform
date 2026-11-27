@@ -59,7 +59,11 @@ public class FlowMetricsCollector {
     private final MultiGauge creditApplicationsOldest;
     private final MultiGauge creditAccounts;
 
-    public FlowMetricsCollector(JdbcClient jdbc, TransactionTemplate tx, MeterRegistry registry) {
+    private final String zone;
+
+    public FlowMetricsCollector(JdbcClient jdbc, TransactionTemplate tx, MeterRegistry registry,
+                                bank.pbp.common.market.MarketPack market) {
+        this.zone = market.zone().getId();   // the market's local time for "overdue" (docs/design/market-packs.md)
         this.jdbc = jdbc;
         this.tx = tx;
         this.registry = registry;
@@ -169,10 +173,11 @@ public class FlowMetricsCollector {
         schedulesOverdue.register(rows(jdbc.sql("""
                         SELECT kind, count(*) FROM payment_schedule
                         WHERE status = 'ACTIVE' AND next_date IS NOT NULL
-                          AND (next_date < (now() AT TIME ZONE 'Europe/London')::date
-                               OR (next_date = (now() AT TIME ZONE 'Europe/London')::date
-                                   AND (now() AT TIME ZONE 'Europe/London')::time > time '06:30'))
+                          AND (next_date < (now() AT TIME ZONE :zone)::date
+                               OR (next_date = (now() AT TIME ZONE :zone)::date
+                                   AND (now() AT TIME ZONE :zone)::time > time '06:30'))
                         GROUP BY 1""")
+                .param("zone", zone)
                 .query((rs, n) -> new Object[] {rs.getString(1), rs.getLong(2)}).list(), 1, "kind"), true);
         List<Object[]> applications = jdbc.sql("""
                         SELECT status, count(*), max(extract(epoch FROM now() - updated_at))

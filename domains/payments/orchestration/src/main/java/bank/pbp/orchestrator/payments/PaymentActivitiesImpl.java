@@ -4,6 +4,8 @@ import bank.pbp.common.correlation.Correlation;
 import bank.pbp.common.events.EventEnvelope;
 import bank.pbp.common.events.EventPublisher;
 import bank.pbp.common.events.Topics;
+import bank.pbp.common.market.MarketPack;
+import bank.pbp.common.market.PaymentScheme;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,18 +49,14 @@ public class PaymentActivitiesImpl implements PaymentActivities {
     private final BigDecimal chapsLimit;
     private final BigDecimal reviewThreshold;
     private final BigDecimal chapsFee;
-    private final ChapsWindow chaps;
+    private final MarketPack market;
+    private final PaymentScheme chaps;
+    private final String currency;
 
     public PaymentActivitiesImpl(JdbcClient jdbc, TransactionTemplate tx, EventPublisher events, ObjectMapper mapper,
                                  RestClient.Builder builder,
                                  @Value("${pbp.adapters.essence-url}") String essenceUrl,
-                                 @Value("${pbp.payments.single-limit}") BigDecimal singleLimit,
-                                 @Value("${pbp.payments.chaps.limit}") BigDecimal chapsLimit,
-                                 @Value("${pbp.payments.review-threshold}") BigDecimal reviewThreshold,
-                                 @Value("${pbp.payments.chaps.fee}") BigDecimal chapsFee,
-                                 @Value("${pbp.payments.chaps.opens}") String chapsOpens,
-                                 @Value("${pbp.payments.chaps.cut-off}") String chapsCutOff,
-                                 @Value("${pbp.payments.chaps.holidays:}") List<String> holidays) {
+                                 MarketPack market) {
         this.jdbc = jdbc;
         this.tx = tx;
         this.events = events;
@@ -67,13 +65,16 @@ public class PaymentActivitiesImpl implements PaymentActivities {
         f.setConnectTimeout(1000);
         f.setReadTimeout(12_000);
         this.essence = builder.clone().baseUrl(essenceUrl).requestFactory(f).build();
-        this.singleLimit = singleLimit;
-        this.chapsLimit = chapsLimit;
-        this.reviewThreshold = reviewThreshold;
-        this.chapsFee = chapsFee;
-        this.chaps = new ChapsWindow(LocalTime.parse(chapsOpens), LocalTime.parse(chapsCutOff),
-                holidays.stream().filter(h -> !h.isBlank()).map(h -> LocalDate.parse(h.trim()))
-                        .collect(java.util.stream.Collectors.toSet()));
+        // Limits, the CHAPS fee and hours come from the market pack (docs/design/market-packs.md, Stage 1 step 2);
+        // the UK pack reads the same pbp.payments.* keys these fields were read from before.
+        this.market = market;
+        this.chaps = market.paymentScheme("CHAPS").orElseThrow(
+                () -> new IllegalStateException("market pack '" + market.code() + "' has no CHAPS scheme"));
+        this.currency = market.currency().getCurrencyCode();
+        this.singleLimit = market.limits().singlePayment();
+        this.chapsLimit = chaps.limit().orElseThrow();
+        this.reviewThreshold = market.limits().reviewThreshold();
+        this.chapsFee = chaps.fee();
     }
 
     @Override
@@ -133,8 +134,8 @@ public class PaymentActivitiesImpl implements PaymentActivities {
             boolean isChaps = "CHAPS".equals(c.paymentType());
             BigDecimal limit = isChaps ? chapsLimit : singleLimit;
             if (amount.compareTo(limit) > 0) {
-                return RiskResult.fail("PAY-LIMIT-001", "Requested " + c.amount() + " GBP exceeds the "
-                        + (isChaps ? "CHAPS" : "single-payment") + " limit " + limit.toPlainString() + " GBP");
+                return RiskResult.fail("PAY-LIMIT-001", "Requested " + c.amount() + " " + currency + " exceeds the "
+                        + (isChaps ? "CHAPS" : "single-payment") + " limit " + limit.toPlainString() + " " + currency);
             }
             boolean review = amount.compareTo(reviewThreshold) >= 0;
             return RiskResult.pass(review, isChaps ? chapsFee.setScale(2).toPlainString() : "0.00");
@@ -172,8 +173,9 @@ public class PaymentActivitiesImpl implements PaymentActivities {
     @Override
     public Window chapsWindow() {
         Instant now = Instant.now();
-        Instant opens = chaps.nextOpening(now);
-        return new Window(chaps.isOpen(now), opens.atZone(ChapsWindow.UK).toOffsetDateTime().toString(),
+        Instant opens = chaps.window().nextOpening(now, market.zone(), market.calendar());
+        return new Window(chaps.window().isOpen(now, market.zone(), market.calendar()),
+                opens.atZone(market.zone()).toOffsetDateTime().toString(),
                 Math.max(0, opens.toEpochMilli() - now.toEpochMilli()));
     }
 

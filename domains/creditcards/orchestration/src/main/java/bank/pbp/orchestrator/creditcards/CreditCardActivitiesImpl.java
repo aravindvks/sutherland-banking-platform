@@ -4,6 +4,7 @@ import static bank.pbp.orchestrator.temporal.ActivitySupport.call;
 import static bank.pbp.orchestrator.temporal.ActivitySupport.withCorrelation;
 
 import bank.pbp.common.events.EventEnvelope;
+import bank.pbp.common.market.MarketPack;
 import bank.pbp.common.events.EventPublisher;
 import bank.pbp.common.events.Topics;
 import bank.pbp.orchestrator.creditcards.CreditCardWorkflows.Application;
@@ -58,6 +59,7 @@ public class CreditCardActivitiesImpl implements CreditCardActivities {
     private final String repaymentAccountNumber;
     private final String lateFee;
     private final String dailyLimit;
+    private final String currency;
     private final Duration coolingOff;
 
     public CreditCardActivitiesImpl(JdbcClient jdbc, TransactionTemplate tx, EventPublisher events,
@@ -69,8 +71,8 @@ public class CreditCardActivitiesImpl implements CreditCardActivities {
                                     @Value("${pbp.credit.repayment-account.sort-code}") String repaymentSortCode,
                                     @Value("${pbp.credit.repayment-account.account-number}") String repaymentAccountNumber,
                                     @Value("${pbp.credit.late-fee}") String lateFee,
-                                    @Value("${pbp.credit.daily-limit}") String dailyLimit,
-                                    @Value("${pbp.credit.cooling-off}") String coolingOff) {
+                                    @Value("${pbp.credit.cooling-off}") String coolingOff,
+                                    MarketPack market) {
         this.jdbc = jdbc;
         this.tx = tx;
         this.events = events;
@@ -82,7 +84,10 @@ public class CreditCardActivitiesImpl implements CreditCardActivities {
         this.repaymentSortCode = repaymentSortCode;
         this.repaymentAccountNumber = repaymentAccountNumber;
         this.lateFee = lateFee;
-        this.dailyLimit = dailyLimit;
+        // The daily spend control and the currency come from the market pack (docs/design/market-packs.md);
+        // the UK pack reads pbp.credit.daily-limit as before.
+        this.dailyLimit = market.limits().dailyCardSpend().toPlainString();
+        this.currency = market.currency().getCurrencyCode();
         this.coolingOff = Duration.parse(coolingOff);
     }
 
@@ -333,7 +338,7 @@ public class CreditCardActivitiesImpl implements CreditCardActivities {
             body.put("debitAccount", r.debitAccount());
             body.put("creditor", Map.of("name", repaymentName, "sortCode", repaymentSortCode,
                     "accountNumber", repaymentAccountNumber));
-            body.put("amount", Map.of("value", r.amount(), "currency", "GBP"));
+            body.put("amount", Map.of("value", r.amount(), "currency", currency));
             body.put("reference", "Credit card " + r.accountId());
             body.put("idempotencyKey", r.repaymentId());
             JsonNode result = call("essence.transfers", () -> essence.post().uri("/v1/transfers").body(body)
@@ -393,7 +398,7 @@ public class CreditCardActivitiesImpl implements CreditCardActivities {
             body.put("creditor", Map.of("name", meta.path("name").asText("Customer"),
                     "sortCode", meta.path("sortCode").asText(repaymentSortCode),
                     "accountNumber", meta.path("accountNumber").asText("")));
-            body.put("amount", Map.of("value", r.amount(), "currency", "GBP"));
+            body.put("amount", Map.of("value", r.amount(), "currency", currency));
             body.put("reference", "Refund " + r.repaymentId());
             body.put("idempotencyKey", r.repaymentId() + ":refund");
             call("essence.transfers", () -> essence.post().uri("/v1/transfers").body(body).retrieve().body(JsonNode.class));
@@ -411,7 +416,7 @@ public class CreditCardActivitiesImpl implements CreditCardActivities {
                 Map<String, Object> data = new LinkedHashMap<>();
                 data.put("repaymentId", r.repaymentId());
                 data.put("accountId", r.accountId());
-                data.put("amount", Map.of("value", r.amount(), "currency", "GBP"));
+                data.put("amount", Map.of("value", r.amount(), "currency", currency));
                 data.put("status", status);
                 data.put("reason", reason);
                 events.publish(Topics.CARD_EVENTS, EventEnvelope.of("creditcard.repayment_" + status.toLowerCase(),

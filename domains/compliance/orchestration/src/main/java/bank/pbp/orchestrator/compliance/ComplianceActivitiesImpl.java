@@ -4,6 +4,7 @@ import static bank.pbp.orchestrator.temporal.ActivitySupport.call;
 import static bank.pbp.orchestrator.temporal.ActivitySupport.withCorrelation;
 
 import bank.pbp.common.events.EventEnvelope;
+import bank.pbp.common.market.MarketPack;
 import bank.pbp.common.events.EventPublisher;
 import bank.pbp.common.events.Topics;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -28,9 +29,13 @@ public class ComplianceActivitiesImpl implements ComplianceWorkflow.ComplianceAc
     private final RestClient mapping;
     private final RestClient thredd;
 
+    private final String currency;
+
     public ComplianceActivitiesImpl(JdbcClient jdbc, EventPublisher events,
                                     @Qualifier("mappingClient") RestClient mapping,
-                                    @Qualifier("threddClient") RestClient thredd) {
+                                    @Qualifier("threddClient") RestClient thredd,
+                                    MarketPack market) {
+        this.currency = market.currency().getCurrencyCode();
         this.jdbc = jdbc;
         this.events = events;
         this.mapping = mapping;
@@ -119,7 +124,7 @@ public class ComplianceActivitiesImpl implements ComplianceWorkflow.ComplianceAc
                         .update();
                 Map<String, Object> data = new LinkedHashMap<>();
                 data.put("paymentId", p.get("paymentId"));
-                data.put("amount", Map.of("value", String.valueOf(p.get("amount")), "currency", "GBP"));
+                data.put("amount", Map.of("value", String.valueOf(p.get("amount")), "currency", currency));
                 data.put("status", "COMPLETED");
                 data.put("reason", "Released after compliance review");
                 events.publish(Topics.PAYMENT_EVENTS, EventEnvelope.of("payment.released", "orchestrator",
