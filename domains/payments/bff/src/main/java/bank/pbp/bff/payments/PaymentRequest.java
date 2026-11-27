@@ -30,6 +30,6 @@ public record PaymentRequest(
 
     public record Money(
             @NotBlank @Pattern(regexp = "\\d{1,15}\\.\\d{2}", message = "must be a decimal string like 500.00") String value,
-            @NotBlank @Pattern(regexp = "GBP", message = "must be GBP in the UK cell") String currency) {
+            @NotBlank @MarketCurrency String currency) {
     }
 }
