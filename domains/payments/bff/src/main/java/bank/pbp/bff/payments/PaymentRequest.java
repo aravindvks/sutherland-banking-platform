@@ -1,6 +1,7 @@
 package bank.pbp.bff.payments;
 
 import bank.pbp.common.market.MarketCurrency;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -23,10 +24,16 @@ public record PaymentRequest(
         @Pattern(regexp = "MATCH|CLOSE_MATCH|NO_MATCH|UNAVAILABLE") String copResult,
         @Pattern(regexp = "FPS|CHAPS") String scheme) {
 
+    /**
+     * The payee. The account comes either as {@code account} (the market's identifier) or as the original
+     * {@code sortCode} and {@code accountNumber} ({@link PayeeAccount}); the market pack checks it.
+     */
+    @ValidAccount
     public record Creditor(
             @NotBlank @Size(max = 140) String name,
-            @NotBlank @Pattern(regexp = "\\d{6}", message = "must be 6 digits") String sortCode,
-            @NotBlank @Pattern(regexp = "\\d{8}", message = "must be 8 digits") String accountNumber) {
+            String sortCode,
+            String accountNumber,
+            @Valid @JsonInclude(JsonInclude.Include.NON_NULL) AccountBody account) implements PayeeAccount {
     }
 
     public record Money(
