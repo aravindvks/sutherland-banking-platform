@@ -41,6 +41,19 @@ class MarketGuardTest {
     }
 
     @Test
+    void theCheckSetsTheZoneWorkflowCodeUses() {
+        MarketPack other = pack("uk");
+        when(other.zone()).thenReturn(ZoneId.of("America/New_York"));
+        try {
+            MarketGuard.check("uk", other);
+            org.assertj.core.api.Assertions.assertThat(ActiveMarket.zone()).isEqualTo(ZoneId.of("America/New_York"));
+        } finally {
+            MarketGuard.check("uk", pack("uk"));
+        }
+        org.assertj.core.api.Assertions.assertThat(ActiveMarket.zone()).isEqualTo(ZoneId.of("Europe/London"));
+    }
+
+    @Test
     void serviceWithoutAPackIsNotChecked() {
         assertThatCode(() -> MarketGuard.check("us", null)).doesNotThrowAnyException();
     }

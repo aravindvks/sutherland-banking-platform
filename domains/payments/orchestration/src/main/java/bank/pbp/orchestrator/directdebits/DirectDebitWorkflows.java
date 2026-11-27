@@ -12,7 +12,6 @@ import io.temporal.workflow.WorkflowMethod;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
 
 /**
  * Direct Debits, with this bank as the payer's bank (Bacs). Three sagas on the payments queue:
@@ -29,7 +28,6 @@ import java.time.ZoneId;
  */
 public final class DirectDebitWorkflows {
 
-    static final ZoneId UK = ZoneId.of("Europe/London");
     /** Bacs debits are applied at the start of the entry day (day 3). */
     static final LocalTime ENTRY_TIME = LocalTime.of(6, 0);
 
@@ -158,7 +156,7 @@ public final class DirectDebitWorkflows {
             Standing presented = activities.present(c);
             // dueAt: the due date at the bank's Bacs processing time (pbp.directdebits.entry-time).
             long due = c.dueAt() != null ? java.time.Instant.parse(c.dueAt()).toEpochMilli()
-                    : LocalDate.parse(c.dueDate()).atTime(ENTRY_TIME).atZone(UK).toInstant().toEpochMilli();
+                    : LocalDate.parse(c.dueDate()).atTime(ENTRY_TIME).atZone(bank.pbp.common.market.ActiveMarket.zone()).toInstant().toEpochMilli();
             long wait = due - Workflow.currentTimeMillis();
             if (wait > 0) {
                 Workflow.sleep(Duration.ofMillis(wait));

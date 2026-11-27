@@ -23,6 +23,7 @@ public final class MarketGuard {
             throw new IllegalStateException("This build carries the '" + pack.code() + "' market pack but PBP_MARKET is '"
                     + wanted + "'. Build with -Pmarket=" + wanted + " (or PBP_MARKET) and deploy that build.");
         }
+        ActiveMarket.set(pack);
         log.info("Market pack '{}' active: {}, {}, {}", pack.code(), pack.currency(), pack.zone(), pack.locale());
     }
 }
