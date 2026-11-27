@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -77,16 +76,16 @@ public class PayeeController {
                 .param("id", Ids.uuidV7())
                 .param("c", customerId)
                 .param("name", body.name())
-                .param("sort", body.sortCode())
-                .param("acc", body.accountNumber())
+                .param("sort", body.effectiveSortCode())
+                .param("acc", body.effectiveAccountNumber())
                 .param("ref", body.reference())
                 .param("cop", result)
                 .query(String.class).single();
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("payeeId", id);
         out.put("name", body.name());
-        out.put("sortCode", body.sortCode());
-        out.put("accountNumber", body.accountNumber());
+        out.put("sortCode", body.effectiveSortCode());
+        out.put("accountNumber", body.effectiveAccountNumber());
         out.put("reference", body.reference());
         out.put("copResult", result);
         out.put("matchedName", cop.path("matchedName").asText(null));
@@ -94,15 +93,21 @@ public class PayeeController {
     }
 
     private JsonNode check(PayeeDetails body) {
-        Map<String, Object> req = Map.of("name", body.name(), "sortCode", body.sortCode(),
-                "accountNumber", body.accountNumber());
+        Map<String, Object> req = Map.of("name", body.name(), "sortCode", body.effectiveSortCode(),
+                "accountNumber", body.effectiveAccountNumber());
         return VendorErrors.call("essence", "payees.confirm", () -> essence.post().uri("/v1/payees/confirm")
                 .body(req).retrieve().body(JsonNode.class));
     }
 
+    /** A payee to check or save; the account in either shape ({@link PayeeAccount}). */
+    @ValidAccount
     public record PayeeDetails(@NotBlank @Size(max = 140) String name,
-                               @NotBlank @Pattern(regexp = "\\d{6}", message = "must be 6 digits") String sortCode,
-                               @NotBlank @Pattern(regexp = "\\d{8}", message = "must be 8 digits") String accountNumber,
-                               @Size(max = 18) String reference) {
+                               String sortCode,
+                               String accountNumber,
+                               @Size(max = 18) String reference,
+                               @jakarta.validation.Valid
+                               @com.fasterxml.jackson.annotation.JsonInclude(
+                                       com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) AccountBody account)
+            implements PayeeAccount {
     }
 }

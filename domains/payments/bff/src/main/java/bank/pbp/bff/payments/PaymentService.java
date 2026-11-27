@@ -42,10 +42,7 @@ public class PaymentService {
             data.put("paymentId", response.get("paymentId"));
             data.put("customerId", customerId.toString());
             data.put("debtorAccount", request.debtorAccount());
-            data.put("creditor", Map.of(
-                    "name", request.creditor().name(),
-                    "sortCode", request.creditor().sortCode(),
-                    "accountNumber", request.creditor().accountNumber()));
+            data.put("creditor", creditorData(request.creditor()));
             data.put("amount", Map.of("value", request.amount().value(), "currency", request.amount().currency()));
             data.put("purpose", request.purpose());
             data.put("remittanceInfo", request.remittanceInfo());
@@ -58,5 +55,16 @@ public class PaymentService {
             events.publish(Topics.PAYMENT_COMMANDS,
                     EventEnvelope.of("payment.create", "bff", correlationId, null, customerId.toString(), data));
         });
+    }
+
+    /**
+     * The creditor as payment commands carry it. Commands keep the original fields until step 4 widens them, so a
+     * request in either shape gives the same command (PaymentRequestShapesTest).
+     */
+    static Map<String, Object> creditorData(PaymentRequest.Creditor creditor) {
+        return Map.of(
+                "name", creditor.name(),
+                "sortCode", creditor.effectiveSortCode(),
+                "accountNumber", creditor.effectiveAccountNumber());
     }
 }

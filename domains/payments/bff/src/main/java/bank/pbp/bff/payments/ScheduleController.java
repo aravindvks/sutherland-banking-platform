@@ -99,8 +99,7 @@ public class ScheduleController {
             data.put("startDate", body.startDate());
             data.put("endDate", body.endDate());
             data.put("debtorAccount", body.debtorAccount());
-            data.put("creditor", Map.of("name", body.creditor().name(), "sortCode", body.creditor().sortCode(),
-                    "accountNumber", body.creditor().accountNumber()));
+            data.put("creditor", PaymentService.creditorData(body.creditor()));
             data.put("amount", Map.of("value", body.amount().value(), "currency", body.amount().currency()));
             data.put("reference", body.reference());
             data.put("scheme", body.scheme());

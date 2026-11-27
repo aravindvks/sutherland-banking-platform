@@ -1,1 +1,6 @@
 // The payments domain's BFF routes; assembled into services/bff.
+
+dependencies {
+    // Tests check the account rules with the real UK pack (the app gets the pack from the root build).
+    testImplementation project(':markets:uk')
+}
