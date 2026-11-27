@@ -18,7 +18,8 @@ public class PaymentQueryController {
             payment_id::text AS "paymentId", correlation_id AS "correlationId", customer_id::text AS "customerId",
             debit_account AS "debitAccount", creditor::text AS creditor, amount::text AS amount, currency,
             payment_type AS "paymentType", status, finastra_ref AS "finastraRef", created_at::text AS "createdAt",
-            cop_result AS "copResult", fee::text AS fee, schedule_id::text AS "scheduleId\"""";
+            COALESCE(name_check_result, cop_result) AS "copResult", fee::text AS fee,
+            schedule_id::text AS "scheduleId", creditor_account::text AS "creditorAccount\"""";
 
     private final JdbcClient jdbc;
 

@@ -15,7 +15,7 @@ import java.util.Map;
 public interface PayeeAccount {
 
     /** The scheme the original request shape means. */
-    String LEGACY_SCHEME = "UK_SORT_CODE";
+    String LEGACY_SCHEME = AccountIdentifier.ORIGINAL_SHAPE_SCHEME;
 
     String sortCode();
 

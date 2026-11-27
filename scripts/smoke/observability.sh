@@ -37,13 +37,14 @@ if curl -sf "$TEMPO/ready" >/dev/null 2>&1; then
 
   step "Tracing: a card tap is one trace from the EHI responder to the Essence hold"
   found=""
-  for _ in $(seq 1 15); do
+  # Up to 90 s: Tempo can take a while to make a new trace searchable on a busy CI runner (it failed once at 30 s).
+  for _ in $(seq 1 45); do
     # The EHI request span and the Essence hold span in one trace (not, say, a reconciliation run that calls both).
     t=$(traces '{ resource.service.name = "ehi-responder" && span.uri = "/ehi/v1/messages" } && { resource.service.name = "essence-adapter" && span.uri =~ ".*holds.*" }' | head -1)
     [ -n "$t" ] && { found="$t ($(trace_services "$t"))"; break; }
     sleep 2
   done
-  [ -n "$found" ] && pass "Trace $found" || fail "No trace joins ehi-responder and essence-adapter"
+  [ -n "$found" ] && pass "Trace $found" || fail "No trace joins ehi-responder and essence-adapter within 90 s"
 else
   echo "  SKIP Tempo not reachable at $TEMPO (observability stack not running)"
 fi

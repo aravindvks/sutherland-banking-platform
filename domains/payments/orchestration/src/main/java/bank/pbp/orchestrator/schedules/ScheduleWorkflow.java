@@ -48,7 +48,14 @@ public interface ScheduleWorkflow {
     record ScheduleRequest(String scheduleId, String customerId, String correlationId, String kind,
                            String frequency, String startDate, String endDate, String debtorAccount,
                            String creditorName, String creditorSortCode, String creditorAccountNumber,
-                           String amount, String currency, String reference, String scheme, String copResult) {
+                           String amount, String currency, String reference, String scheme, String copResult,
+                           bank.pbp.common.market.AccountIdentifier creditorAccount) {
+
+        /** The creditor's account; schedules started before identifiers rebuild it from the original fields. */
+        bank.pbp.common.market.AccountIdentifier account() {
+            return creditorAccount != null ? creditorAccount
+                    : bank.pbp.common.market.AccountIdentifier.fromOriginalShape(creditorSortCode, creditorAccountNumber);
+        }
     }
 
     @ActivityInterface

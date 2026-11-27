@@ -15,7 +15,7 @@ class SchedulesTest {
     private static ScheduleRequest request(String kind, String frequency, String start, String end) {
         return new ScheduleRequest("0192f1c5-0000-7000-8000-00000000000a", "0192f1c4-0000-7000-8000-000000000001",
                 "COR-PAY-7K2M9QXA4B1D", kind, frequency, start, end, "ACC-5501", "Ravi Kumar", "200001", "41550198",
-                "10.00", "GBP", "Rent", null, "MATCH");
+                "10.00", "GBP", "Rent", null, "MATCH", null);
     }
 
     @Test
