@@ -1,0 +1,3 @@
+// The UK market pack (docs/design/market-packs.md): sort codes, Faster Payments, CHAPS, Bacs Direct Debits,
+// Confirmation of Payee, GBP, UK time and the England and Wales bank holidays. Built into the apps when
+// PBP_MARKET (or -Pmarket) is uk, the default.

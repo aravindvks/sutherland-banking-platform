@@ -20,6 +20,12 @@ include 'libs:bff-core'
     project(":domains:${d}-bff").projectDir = file("domains/${d}/bff")
 }
 
+// Market packs (docs/design/market-packs.md), one folder per country: markets/<code>. A build carries one, chosen
+// by -Pmarket or PBP_MARKET (root build.gradle).
+['uk'].each { m ->
+    include "markets:${m}"
+}
+
 include 'services:bff'
 include 'services:orchestrator'
 include 'services:mapping-service'

@@ -7,6 +7,8 @@ import bank.pbp.common.events.CorrelationRecordInterceptor;
 import bank.pbp.common.events.EventPublisher;
 import bank.pbp.common.events.OutboxWriter;
 import bank.pbp.common.ids.JourneyType;
+import bank.pbp.common.market.MarketGuard;
+import bank.pbp.common.market.MarketPack;
 import bank.pbp.common.observability.CorrelationObservationFilter;
 import bank.pbp.common.observability.TraceHeaders;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,11 +28,19 @@ import org.springframework.kafka.listener.RecordInterceptor;
 
 /**
  * Shared platform wiring every service gets by depending on platform-common:
- * correlation IDs in, out and through Kafka, and the problem+json error envelope.
+ * correlation IDs in, out and through Kafka, the problem+json error envelope, and the market pack check.
  */
 @AutoConfiguration(afterName = {"org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration",
         "org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration"})
 public class PlatformAutoConfiguration {
+
+    /** The built-in market pack must be the market this deployment is for (docs/design/market-packs.md). */
+    @Bean
+    org.springframework.beans.factory.SmartInitializingSingleton marketGuard(
+            @Value("${pbp.market:uk}") String market,
+            org.springframework.beans.factory.ObjectProvider<MarketPack> pack) {
+        return () -> MarketGuard.check(market, pack.getIfAvailable());
+    }
 
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
