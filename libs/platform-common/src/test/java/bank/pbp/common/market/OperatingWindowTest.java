@@ -36,7 +36,8 @@ class OperatingWindowTest {
         Instant open = uk("2026-12-24T10:00:00");
         assertThat(chaps.nextOpening(open, UK, calendar)).isEqualTo(open);
         assertThat(chaps.nextOpening(uk("2026-12-24T05:00:00"), UK, calendar)).isEqualTo(uk("2026-12-24T06:00:00"));
-        assertThat(chaps.nextOpening(uk("2026-12-24T18:00:00"), UK, calendar)).isEqualTo(uk("2026-12-29T06:00:00"));
+        // Christmas Day is this calendar's only holiday, so after Thursday's cut-off the next opening is Monday 28 December.
+        assertThat(chaps.nextOpening(uk("2026-12-24T18:00:00"), UK, calendar)).isEqualTo(uk("2026-12-28T06:00:00"));
         assertThat(chaps.waitFrom(uk("2026-12-24T05:00:00"), UK, calendar)).isEqualTo(Duration.ofHours(1));
     }
 
