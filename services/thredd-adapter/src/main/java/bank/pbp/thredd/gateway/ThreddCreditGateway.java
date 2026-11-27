@@ -4,7 +4,7 @@ import java.util.Map;
 
 /**
  * Thredd credit processing, in our own terms: the credit card account (limit, balance, open-to-buy,
- * interest, minimum payment, statements) is held by Thredd. Money as GBP decimal strings.
+ * interest, minimum payment, statements) is held by Thredd. Money as decimal strings in the market currency.
  * Connectors chosen by {@code vendor.thredd.mode}, like {@link ThreddGateway}.
  */
 public interface ThreddCreditGateway {

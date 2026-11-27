@@ -45,9 +45,16 @@ public class EssenceSimulator {
     private final String webhookUrl;
     private final SimulatorState state;
 
+    /** The market's currency and local time (docs/design/market-packs.md); GBP and London in the UK. */
+    private final String currency;
+    private final java.time.ZoneId zone;
+
     public EssenceSimulator(WebhookSender webhooks, @Value("${sim.essence.webhook-url}") String webhookUrl,
                             @Value("${sim.state-file:}") String stateFile,
-                            com.fasterxml.jackson.databind.ObjectMapper mapper) {
+                            com.fasterxml.jackson.databind.ObjectMapper mapper,
+                            bank.pbp.common.market.MarketPack market) {
+        this.currency = market.currency().getCurrencyCode();
+        this.zone = market.zone();
         this.webhooks = webhooks;
         this.webhookUrl = webhookUrl;
         reset();
@@ -179,7 +186,7 @@ public class EssenceSimulator {
             return error(HttpStatus.NOT_FOUND, "ACCOUNT_NOT_FOUND", "No account " + accountId);
         }
         return ResponseEntity.ok(Map.of("accountId", a.id, "available", available(a).toPlainString(),
-                "ledger", a.ledger.toPlainString(), "currency", "GBP"));
+                "ledger", a.ledger.toPlainString(), "currency", currency));
     }
 
     // ---------- holds (card authorisations) ----------
@@ -353,7 +360,7 @@ public class EssenceSimulator {
         e.put("scheme", "BACS".equals(req.get("scheme")) ? "BACS" : "FPS");
         e.put("creditAccountId", a.id);
         e.put("amount", amount.toPlainString());
-        e.put("currency", "GBP");
+        e.put("currency", currency);
         e.put("debtorName", String.valueOf(req.getOrDefault("debtorName", "J Smith")));
         e.put("debtorSortCode", String.valueOf(req.getOrDefault("debtorSortCode", "040004")));
         e.put("reference", String.valueOf(req.getOrDefault("reference", "Payment")));
@@ -505,7 +512,7 @@ public class EssenceSimulator {
         }
         BigDecimal amount = new BigDecimal(String.valueOf(req.getOrDefault("amount", "30.00")));
         String due = String.valueOf(req.getOrDefault("dueDate",
-                java.time.LocalDate.now(java.time.ZoneId.of("Europe/London")).toString()));
+                java.time.LocalDate.now(zone).toString()));
         Collection c = new Collection("DDC-" + shortId(), m.ref, m.accountId, amount);
         collections.put(c.ref, c);
         Map<String, Object> e = new LinkedHashMap<>();
@@ -515,7 +522,7 @@ public class EssenceSimulator {
         e.put("mandateRef", m.ref);
         e.put("accountId", m.accountId);
         e.put("amount", amount.toPlainString());
-        e.put("currency", "GBP");
+        e.put("currency", currency);
         e.put("dueDate", due);
         e.put("originatorName", m.originatorName);
         e.put("serviceUserNumber", m.serviceUserNumber);

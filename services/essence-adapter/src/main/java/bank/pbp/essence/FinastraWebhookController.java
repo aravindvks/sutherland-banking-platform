@@ -38,9 +38,13 @@ public class FinastraWebhookController {
     private final String secret;
     private final long windowSeconds;
 
+    private final String currency;
+
     public FinastraWebhookController(EventPublisher events, ObjectMapper mapper,
                                      @Value("${webhook.secret}") String secret,
-                                     @Value("${webhook.replay-window-seconds}") long windowSeconds) {
+                                     @Value("${webhook.replay-window-seconds}") long windowSeconds,
+                                     bank.pbp.common.market.MarketPack market) {
+        this.currency = market.currency().getCurrencyCode();   // when Essence leaves the currency out
         this.events = events;
         this.mapper = mapper;
         this.secret = secret;
@@ -75,7 +79,7 @@ public class FinastraWebhookController {
                 String correlationId = Ids.newCorrelationId(JourneyType.PAY);
                 Correlation.set(correlationId);
                 data.put("creditAccount", n.path("creditAccountId").asText());
-                data.put("amount", Map.of("value", n.path("amount").asText(), "currency", n.path("currency").asText("GBP")));
+                data.put("amount", Map.of("value", n.path("amount").asText(), "currency", n.path("currency").asText(currency)));
                 data.put("debtorName", n.path("debtorName").asText());
                 data.put("debtorSortCode", n.path("debtorSortCode").asText());
                 data.put("reference", n.path("reference").asText());
@@ -102,7 +106,7 @@ public class FinastraWebhookController {
                 data.put("collectionRef", n.path("collectionRef").asText());
                 data.put("mandateRef", n.path("mandateRef").asText());
                 data.put("account", n.path("accountId").asText());
-                data.put("amount", Map.of("value", n.path("amount").asText(), "currency", n.path("currency").asText("GBP")));
+                data.put("amount", Map.of("value", n.path("amount").asText(), "currency", n.path("currency").asText(currency)));
                 data.put("dueDate", n.path("dueDate").asText());
                 data.put("originatorName", n.path("originatorName").asText());
                 data.put("serviceUserNumber", n.path("serviceUserNumber").asText());

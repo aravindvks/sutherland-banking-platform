@@ -11,7 +11,7 @@ public interface ThreddGateway {
     /** ACTIVE, BLOCKED, LOST or CLOSED. */
     void setStatus(String token, String status, String idempotencyKey);
 
-    /** Spending controls: daily limit (GBP decimal string) and channel switches. */
+    /** Spending controls: daily limit (decimal string, market currency) and channel switches. */
     void setControls(String token, Controls controls, String idempotencyKey);
 
     record Controls(String dailyLimit, boolean online, boolean contactless, boolean atm) {

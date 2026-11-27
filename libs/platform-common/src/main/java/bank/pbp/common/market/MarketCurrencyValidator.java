@@ -1,6 +1,5 @@
-package bank.pbp.bff.payments;
+package bank.pbp.common.market;
 
-import bank.pbp.common.market.MarketPack;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
