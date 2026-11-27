@@ -59,6 +59,7 @@ externalSecrets:
   enabled: false            # true: External Secrets Operator syncs the Secret from OCI Vault
   vaultId: ""
   secretStore: oci-vault
+  extraKeys: []             # more secret keys for one cloud (values-gcp.yaml: the Redis CA certificate)
 
 # Module switches (phase A of the Next Version Roadmap): the modules this bank runs. Keep it the same as the list the
 # images were built with (./gradlew -Pmodules=...); the deploy workflow passes one list to both. Without creditcards
@@ -103,6 +104,15 @@ aws:
 azure:
   webPrivateIp: ""
   ehiPrivateIp: ""
+
+# GCP only (values-gcp.yaml): names of what infra/terraform/gcp creates for the GKE Ingress (terraform outputs).
+gcp:
+  webHost: ""
+  ehiHost: ""
+  staticIpName: ""           # terraform output web_ip_name
+  certificateName: ""        # terraform output certificate_name (Google-managed, web and EHI host names)
+  securityPolicy: ""         # terraform output security_policy_name (Cloud Armor)
+  sslPolicy: ""              # terraform output ssl_policy_name
 
 # Topic creation Job, for Kafka services without Terraform topics (MSK). Off on OCI and Azure, where
 # Terraform creates the streams / event hubs.

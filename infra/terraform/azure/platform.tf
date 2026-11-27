@@ -331,7 +331,8 @@ resource "azurerm_web_application_firewall_policy" "waf" {
     }
   }
 
-  # 50 requests a second per client IP, as the OCI API Gateway's rate limit.
+  # 50 requests a second per client IP, as the OCI API Gateway's rate limit. Not on the EHI host: Thredd sends
+  # up to 500 card authorisations a second from a few addresses, and the next rule admits only Thredd there.
   custom_rules {
     name                 = "ratelimit"
     priority             = 1
@@ -346,6 +347,16 @@ resource "azurerm_web_application_firewall_policy" "waf" {
       }
       operator     = "IPMatch"
       match_values = ["0.0.0.0/0"]
+    }
+    match_conditions {
+      match_variables {
+        variable_name = "RequestHeaders"
+        selector      = "Host"
+      }
+      operator           = "Equal"
+      negation_condition = true
+      match_values       = [var.ehi_hostname]
+      transforms         = ["Lowercase"]
     }
   }
 

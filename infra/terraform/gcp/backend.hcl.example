@@ -1,0 +1,2 @@
+bucket = "pbp-terraform-state-PROJECT_ID"
+prefix = "pbp/dev"

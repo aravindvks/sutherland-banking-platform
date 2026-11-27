@@ -29,7 +29,7 @@ The design is in the HLD and LLD documents ("Sutherland Banking Platform – Hig
 
 Validated in CI (`terraform validate`, `helm lint`, `kubeconform`) but not yet applied to a tenancy.
 
-1. **Infrastructure** (`infra/terraform/oci`; AWS and Azure in `infra/terraform/aws` and `infra/terraform/azure`): copy `terraform.tfvars.example` and `backend.hcl.example`, then
+1. **Infrastructure** (`infra/terraform/oci`; Azure, AWS and GCP in `infra/terraform/azure`, `infra/terraform/aws` and `infra/terraform/gcp`): copy `terraform.tfvars.example` and `backend.hcl.example`, then
    `terraform init -backend-config=backend.hcl && terraform apply`. Give the `nat_egress_ip` output to
    Finastra, Thredd and Atfinity for their allow-lists.
 2. **Cluster add-ons** (once per cluster): Temporal (official Temporal Helm chart, namespace `temporal`,
@@ -46,27 +46,28 @@ Validated in CI (`terraform validate`, `helm lint`, `kubeconform`) but not yet a
    `ehi_load_balancer_id` (the `ehi-public` load balancer) in Terraform and apply again to wire API Gateway
    and WAF.
 
-## Running on AWS or Azure (same code, a cloud module each)
+## Running on Azure, AWS or GCP (same code, a cloud module each)
 
 The services, simulator and web app use no cloud SDK: they reach PostgreSQL, Kafka, Redis, Temporal, OIDC and
 OTLP through those protocols, so the same images run on every cloud. What changes per cloud is one Terraform
 module and one Helm values file, with the same outputs and the same chart:
 
-| Need | OCI (`infra/terraform/oci`) | AWS (`infra/terraform/aws`) | Azure (`infra/terraform/azure`) |
-|---|---|---|---|
-| Kubernetes | OKE | EKS (private API, Pod Identity) | AKS (private, workload identity) |
-| PostgreSQL 16, logical replication | OCI Database with PostgreSQL | RDS, `rds.logical_replication=1`, read replica | Flexible Server, `wal_level=logical`, zone-redundant HA |
-| Kafka | OCI Streaming (Terraform streams) | MSK, SASL/SCRAM (chart's `kafka-topics` Job) | Event Hubs Premium, Kafka endpoint (Terraform hubs, compacted where needed) |
-| Redis | OCI Cache | ElastiCache, TLS | Azure Cache for Redis Premium, TLS 6380 |
-| Secrets | Vault | KMS + Secrets Manager | Key Vault |
-| Archive, 7-year lock | Object Storage retention rule | S3 Object Lock (compliance) | Blob immutability policy |
-| Registry | OCIR | ECR (node role pulls) | ACR (AcrPull) |
-| Public entry and WAF | API Gateway + WAF; EHI load balancer | ALB Ingress + WAF; EHI NLB, Thredd ranges only | Application Gateway WAF_v2 for web and EHI |
-| Egress IP for vendors | NAT gateway | NAT gateway (one EIP) | NAT gateway |
+| Need | OCI (`infra/terraform/oci`) | AWS (`infra/terraform/aws`) | Azure (`infra/terraform/azure`) | GCP (`infra/terraform/gcp`) |
+|---|---|---|---|---|
+| Kubernetes | OKE | EKS (private API, Pod Identity) | AKS (private, workload identity) | GKE regional (private, Workload Identity) |
+| PostgreSQL 16, logical replication | OCI Database with PostgreSQL | RDS, `rds.logical_replication=1`, read replica | Flexible Server, `wal_level=logical`, zone-redundant HA | Cloud SQL, `cloudsql.logical_decoding=on`, regional HA, read replica |
+| Kafka | OCI Streaming (Terraform streams) | MSK, SASL/SCRAM (chart's `kafka-topics` Job) | Event Hubs Premium, Kafka endpoint (Terraform hubs, compacted where needed) | Managed Service for Apache Kafka, SASL PLAIN with a service account key (Terraform topics) |
+| Redis | OCI Cache | ElastiCache, TLS | Azure Cache for Redis Premium, TLS 6380 | Memorystore Standard, TLS 6378 (CA trusted through a Spring SSL bundle) |
+| Secrets | Vault | KMS + Secrets Manager | Key Vault | Cloud KMS + Secret Manager (UK-only replication) |
+| Archive, 7-year lock | Object Storage retention rule | S3 Object Lock (compliance) | Blob immutability policy | Cloud Storage retention policy (Bucket Lock) |
+| Registry | OCIR | ECR (node role pulls) | ACR (AcrPull) | Artifact Registry (node service account pulls) |
+| Public entry and WAF | API Gateway + WAF; EHI load balancer | ALB Ingress + WAF; EHI NLB, Thredd ranges only | Application Gateway WAF_v2 for web and EHI | GKE Ingress (global HTTPS load balancer) + Cloud Armor for web and EHI |
+| Egress IP for vendors | NAT gateway | NAT gateway (one EIP) | NAT gateway | Cloud NAT (one reserved address) |
 
 Deploy: `terraform apply` in the cloud's folder, copy the outputs into `deploy/helm/pbp/values-<cloud>.yaml`,
 then `helm upgrade --install pbp-dev deploy/helm/pbp -f deploy/helm/pbp/values-<cloud>.yaml`. CI validates all
-three modules and renders the chart for each cloud; none has been applied yet.
+four modules and renders the chart for each cloud; none has been applied yet. Provisioning runbooks for each cloud:
+`docs/runbooks/` (`00-common.md`, then `01-oci.md`, `02-azure.md`, `03-aws.md`, `04-gcp.md`).
 
 Open points: the deploy workflow still pushes to OCIR only; the outbox connector is registered by a Helm hook Job
 after every install or upgrade (`templates/connect-register.yaml`, the same settings as
@@ -309,7 +310,8 @@ that class is written. Nothing outside the adapter changes.
 
 ## Corrections to the LLD found while building
 
-- Terraform is in `infra/terraform/oci`, with `aws` and `azure` beside it (the LLD names `infra/terraform`).
+- Terraform is in `infra/terraform/oci`, with `azure`, `aws` and `gcp` beside it (the LLD names `infra/terraform`).
+- GCP has one UK region (London), so a GCP deployment has no in-country standby region; zones inside London cover a zone failure (`docs/runbooks/04-gcp.md`, section 12).
 
 - OCI Streaming keeps messages for at most 7 days, so the LLD's 30-day retention for event topics is set to 7 days; longer history comes from the archive bucket and the database.
 - Identity Domains carries roles as group names in the `groups` claim; create groups `staff` and `compliance`. Keycloak locally uses realm roles.

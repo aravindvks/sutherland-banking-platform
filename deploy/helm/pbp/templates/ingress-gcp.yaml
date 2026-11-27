@@ -1,0 +1,82 @@
+{{- if and (eq .Values.cloud "gcp") .Values.services.web }}
+{{- $cards := or (has "cards" .Values.modules) (has "creditcards" .Values.modules) }}
+# GCP public entry: one global external HTTPS load balancer created by GKE from this Ingress, with the
+# reserved address, the Google-managed certificate, the TLS policy and the Cloud Armor policy from
+# infra/terraform/gcp. It serves the web app (which proxies /v1 to the BFF) and, with a card module,
+# Thredd's EHI host; Cloud Armor admits only Thredd's ranges to the EHI host. On OCI the same role is played
+# by API Gateway plus the EHI load balancer, on AWS by the ALB plus the NLB, on Azure by the Application Gateway.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.allow-http: "false"
+    kubernetes.io/ingress.global-static-ip-name: {{ .Values.gcp.staticIpName | quote }}
+    ingress.gcp.kubernetes.io/pre-shared-cert: {{ .Values.gcp.certificateName | quote }}
+    networking.gke.io/v1beta1.FrontendConfig: web
+spec:
+  rules:
+    - host: {{ .Values.gcp.webHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  name: http
+    {{- if $cards }}
+    - host: {{ .Values.gcp.ehiHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ehi-responder
+                port:
+                  name: http
+    {{- end }}
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: web
+spec:
+  sslPolicy: {{ .Values.gcp.sslPolicy | quote }}
+  redirectToHttps:
+    enabled: false
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: web
+spec:
+  securityPolicy:
+    name: {{ .Values.gcp.securityPolicy | quote }}
+  timeoutSec: 60
+  healthCheck:
+    type: HTTP
+    requestPath: /
+  connectionDraining:
+    drainingTimeoutSec: 10
+{{- if $cards }}
+---
+# Thredd's own time limit applies; the EHI responder answers within its budget (LLD section 5).
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: ehi-responder
+spec:
+  securityPolicy:
+    name: {{ .Values.gcp.securityPolicy | quote }}
+  timeoutSec: 5
+  healthCheck:
+    type: HTTP
+    requestPath: /actuator/health/readiness
+  connectionDraining:
+    drainingTimeoutSec: 10
+{{- end }}
+{{- end }}

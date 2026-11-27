@@ -1,5 +1,5 @@
 {{/*
-Cloud-specific load balancer annotations (values: cloud = oci | aws | azure). Everything else in the chart
+Cloud-specific load balancer annotations (values: cloud = oci | aws | azure | gcp). Everything else in the chart
 is the same on every cloud; addresses and credentials come from values-<cloud>.yaml.
 */}}
 
@@ -41,5 +41,13 @@ service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "100"
 {{- end }}
 
 {{- define "pbp.webLoadBalancer" -}}
-{{- if and .Values.webInternalLoadBalancer (ne .Values.cloud "aws") }}true{{ end }}
+{{- if and .Values.webInternalLoadBalancer (not (has .Values.cloud (list "aws" "gcp"))) }}true{{ end }}
+{{- end }}
+
+{{/* GCP: the web app and the EHI responder sit behind the GKE Ingress (global HTTPS load balancer) as
+network endpoint groups, each with a BackendConfig for Cloud Armor, health check and timeout. */}}
+{{- define "pbp.gcpBackend" -}}
+{{- $name := index . 0 -}}
+{{- $root := index . 1 -}}
+{{- if and (eq $root.Values.cloud "gcp") (has $name (list "web" "ehi-responder")) }}true{{ end }}
 {{- end }}
