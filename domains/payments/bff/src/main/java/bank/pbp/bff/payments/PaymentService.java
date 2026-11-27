@@ -58,13 +58,15 @@ public class PaymentService {
     }
 
     /**
-     * The creditor as payment commands carry it. Commands keep the original fields until step 4 widens them, so a
-     * request in either shape gives the same command (PaymentRequestShapesTest).
+     * The creditor as payment and schedule commands carry it: the market's identifier ({@code account}, Stage 1
+     * step 4) beside the original fields, which the orchestrator and the core still use. A request in either shape
+     * gives the same command (PaymentRequestShapesTest).
      */
     static Map<String, Object> creditorData(PaymentRequest.Creditor creditor) {
         return Map.of(
                 "name", creditor.name(),
                 "sortCode", creditor.effectiveSortCode(),
-                "accountNumber", creditor.effectiveAccountNumber());
+                "accountNumber", creditor.effectiveAccountNumber(),
+                "account", creditor.identifier().toJson());
     }
 }

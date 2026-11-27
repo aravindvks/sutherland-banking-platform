@@ -85,15 +85,17 @@ public class PaymentActivitiesImpl implements PaymentActivities {
             int inserted = jdbc.sql("""
                             INSERT INTO payment (payment_id, correlation_id, customer_id, debit_account, creditor,
                                                  amount, currency, payment_type, status, idempotency_key, created_at,
-                                                 schedule_id)
+                                                 schedule_id, creditor_account)
                             VALUES (:id, :correlationId, :customerId, :debit, CAST(:creditor AS jsonb), :amount,
-                                    :currency, :type, 'INITIATED', :idem, :createdAt, CAST(:schedule AS uuid))
+                                    :currency, :type, 'INITIATED', :idem, :createdAt, CAST(:schedule AS uuid),
+                                    CAST(:account AS jsonb))
                             ON CONFLICT DO NOTHING""")
                     .param("id", UUID.fromString(c.paymentId()))
                     .param("correlationId", c.correlationId())
                     .param("customerId", UUID.fromString(c.customerId()))
                     .param("debit", c.debtorAccount())
                     .param("creditor", json(creditor))
+                    .param("account", c.account() == null ? null : json(c.account().toJson()))
                     .param("amount", new BigDecimal(c.amount()))
                     .param("currency", c.currency())
                     .param("type", c.paymentType())
@@ -156,7 +158,7 @@ public class PaymentActivitiesImpl implements PaymentActivities {
                 throw ApplicationFailure.newFailure("Confirmation of Payee failed: " + e.getStatusCode(), "PAY-COP-002");
             }
             String result = r == null || r.get("result") == null ? "UNAVAILABLE" : String.valueOf(r.get("result"));
-            jdbc.sql("UPDATE payment SET cop_result = :r WHERE payment_id = :id AND created_at = :createdAt")
+            jdbc.sql("UPDATE payment SET cop_result = :r, name_check_result = :r WHERE payment_id = :id AND created_at = :createdAt")
                     .param("r", result)
                     .param("id", UUID.fromString(c.paymentId()))
                     .param("createdAt", OffsetDateTime.parse(c.initiatedAt()))

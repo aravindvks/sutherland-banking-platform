@@ -113,7 +113,9 @@ class PaymentRequestShapesTest {
 
     @Test
     void bothShapesGiveTheSameCommand() {
-        Map<String, Object> before = Map.of("name", "Jane Doe", "sortCode", "040004", "accountNumber", "12345678");
+        Map<String, Object> before = Map.of("name", "Jane Doe", "sortCode", "040004", "accountNumber", "12345678",
+                "account", Map.of("scheme", "UK_SORT_CODE",
+                        "fields", Map.of("sortCode", "040004", "accountNumber", "12345678")));
         assertThat(PaymentService.creditorData(legacy("040004", "12345678"))).isEqualTo(before);
         assertThat(PaymentService.creditorData(account("UK_SORT_CODE",
                 Map.of("sortCode", "040004", "accountNumber", "12345678")))).isEqualTo(before);

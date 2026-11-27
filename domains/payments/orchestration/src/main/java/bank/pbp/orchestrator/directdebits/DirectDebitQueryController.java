@@ -22,7 +22,7 @@ public class DirectDebitQueryController {
     public List<Map<String, Object>> mandates(@PathVariable UUID customerId) {
         return jdbc.sql("""
                         SELECT m.mandate_id::text AS "mandateId", m.mandate_ref AS "mandateRef",
-                               m.originator_name AS "originatorName", m.service_user_number AS "serviceUserNumber",
+                               m.originator_name AS "originatorName", COALESCE(m.originator_id, m.service_user_number) AS "serviceUserNumber",
                                m.payer_reference AS "payerReference", m.debit_account AS "debitAccount", m.status,
                                m.created_at::text AS "createdAt", m.cancelled_at::text AS "cancelledAt",
                                last.amount::text AS "lastAmount", last.status AS "lastStatus",

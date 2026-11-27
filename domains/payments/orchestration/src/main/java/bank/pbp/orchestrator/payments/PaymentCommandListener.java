@@ -107,7 +107,8 @@ public class PaymentCommandListener {
                 str(d.get("idempotencyKey")),
                 str(d.get("initiatedAt")),
                 str(d.get("copResult")),
-                null);
+                null,
+                bank.pbp.common.market.AccountIdentifier.fromJson(creditor.get("account")));
     }
 
     private static String str(Object value) {

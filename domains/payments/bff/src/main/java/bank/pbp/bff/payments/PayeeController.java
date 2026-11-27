@@ -33,12 +33,15 @@ public class PayeeController {
     private final RestClient essence;
     private final JdbcClient jdbc;
     private final Caller caller;
+    private final com.fasterxml.jackson.databind.ObjectMapper mapper;
 
     public PayeeController(RestClient.Builder builder, JdbcClient jdbc, Caller caller,
-                           @Value("${pbp.services.essence-adapter-url}") String essenceUrl) {
+                           @Value("${pbp.services.essence-adapter-url}") String essenceUrl,
+                           com.fasterxml.jackson.databind.ObjectMapper mapper) {
         this.essence = builder.clone().baseUrl(essenceUrl).build();
         this.jdbc = jdbc;
         this.caller = caller;
+        this.mapper = mapper;
     }
 
     /** Checks a name against an account without saving it. */
@@ -53,8 +56,9 @@ public class PayeeController {
         UUID customerId = caller.customerId(request);
         return jdbc.sql("""
                         SELECT payee_id::text AS "payeeId", name, sort_code AS "sortCode",
-                               account_number AS "accountNumber", reference, cop_result AS "copResult",
-                               cop_checked_at::text AS "copCheckedAt"
+                               account_number AS "accountNumber", reference,
+                               COALESCE(name_check_result, cop_result) AS "copResult",
+                               cop_checked_at::text AS "copCheckedAt", account_identifier::text AS "account"
                         FROM payee WHERE customer_id = :c ORDER BY created_at DESC LIMIT 50""")
                 .param("c", customerId).query().listOfRows();
     }
@@ -67,11 +71,12 @@ public class PayeeController {
         String result = cop.path("result").asText("UNAVAILABLE");
         String id = jdbc.sql("""
                         INSERT INTO payee (payee_id, customer_id, name, sort_code, account_number, reference,
-                                           cop_result, cop_checked_at)
-                        VALUES (:id, :c, :name, :sort, :acc, :ref, :cop, now())
+                                           cop_result, name_check_result, account_identifier, cop_checked_at)
+                        VALUES (:id, :c, :name, :sort, :acc, :ref, :cop, :cop, CAST(:account AS jsonb), now())
                         ON CONFLICT (customer_id, sort_code, account_number)
                         DO UPDATE SET name = EXCLUDED.name, reference = EXCLUDED.reference,
-                                      cop_result = EXCLUDED.cop_result, cop_checked_at = now()
+                                      cop_result = EXCLUDED.cop_result, name_check_result = EXCLUDED.name_check_result,
+                                      account_identifier = EXCLUDED.account_identifier, cop_checked_at = now()
                         RETURNING payee_id::text""")
                 .param("id", Ids.uuidV7())
                 .param("c", customerId)
@@ -80,6 +85,7 @@ public class PayeeController {
                 .param("acc", body.effectiveAccountNumber())
                 .param("ref", body.reference())
                 .param("cop", result)
+                .param("account", accountJson(body))
                 .query(String.class).single();
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("payeeId", id);
@@ -90,6 +96,15 @@ public class PayeeController {
         out.put("copResult", result);
         out.put("matchedName", cop.path("matchedName").asText(null));
         return out;
+    }
+
+    /** The payee's account as the market's identifier, stored beside the sort code and number (Stage 1 step 4). */
+    private String accountJson(PayeeDetails body) {
+        try {
+            return mapper.writeValueAsString(body.identifier().toJson());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private JsonNode check(PayeeDetails body) {

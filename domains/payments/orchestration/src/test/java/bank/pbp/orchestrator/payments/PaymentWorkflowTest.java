@@ -182,7 +182,7 @@ class PaymentWorkflowTest {
     private static PaymentCommand command(String amount, String type, String copResult, String paymentId) {
         return new PaymentCommand(paymentId, "0192f1c4-0000-7000-8000-000000000001",
                 "COR-PAY-7K2M9QXA4B1D", "ACC-5501", "Ravi Kumar", "200001", "41550198", amount, "GBP",
-                "Rent share", type, "key-1", "2026-11-06T10:00:00Z", copResult, null);
+                "Rent share", type, "key-1", "2026-11-06T10:00:00Z", copResult, null, null);
     }
 
     /** Stands in for the database, Kafka and Essence adapter. */

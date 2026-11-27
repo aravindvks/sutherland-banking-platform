@@ -49,9 +49,10 @@ public class ScheduleActivitiesImpl implements ScheduleWorkflow.ScheduleActiviti
             int inserted = jdbc.sql("""
                             INSERT INTO payment_schedule (schedule_id, customer_id, correlation_id, kind, frequency,
                                    debit_account, creditor, amount, currency, reference, scheme, cop_result,
-                                   start_date, end_date, next_date, status)
+                                   name_check_result, creditor_account, start_date, end_date, next_date, status)
                             VALUES (:id, :customer, :correlation, :kind, :frequency, :debit, CAST(:creditor AS jsonb),
-                                    :amount, :currency, :reference, :scheme, :cop, :start, :end, :start, 'ACTIVE')
+                                    :amount, :currency, :reference, :scheme, :cop, :cop, CAST(:account AS jsonb),
+                                    :start, :end, :start, 'ACTIVE')
                             ON CONFLICT (schedule_id) DO NOTHING""")
                     .param("id", UUID.fromString(r.scheduleId()))
                     .param("customer", UUID.fromString(r.customerId()))
@@ -66,6 +67,7 @@ public class ScheduleActivitiesImpl implements ScheduleWorkflow.ScheduleActiviti
                     .param("reference", r.reference())
                     .param("scheme", r.scheme())
                     .param("cop", r.copResult())
+                    .param("account", r.account() == null ? null : json(r.account().toJson()))
                     .param("start", LocalDate.parse(r.startDate()))
                     .param("end", r.endDate() == null || r.endDate().isBlank() ? null : LocalDate.parse(r.endDate()))
                     .update();
@@ -97,7 +99,8 @@ public class ScheduleActivitiesImpl implements ScheduleWorkflow.ScheduleActiviti
                 "schedule:" + r.scheduleId() + ":" + index,
                 Instant.now().truncatedTo(ChronoUnit.MICROS).toString(),
                 r.copResult(),
-                r.scheduleId());
+                r.scheduleId(),
+                r.account());
     }
 
     @Override

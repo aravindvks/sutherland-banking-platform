@@ -63,8 +63,10 @@ public class DirectDebitActivitiesImpl implements DirectDebitWorkflows.DirectDeb
         withCorrelation(n.correlationId(), () -> {
             int inserted = jdbc.sql("""
                             INSERT INTO dd_mandate (mandate_id, mandate_ref, customer_id, debit_account, originator_name,
-                                                    service_user_number, payer_reference, status, correlation_id)
-                            VALUES (:id, :ref, :customer, :account, :originator, :sun, :payerRef, 'ACTIVE', :correlation)
+                                                    service_user_number, originator_id, payer_reference, status,
+                                                    correlation_id)
+                            VALUES (:id, :ref, :customer, :account, :originator, :sun, :sun, :payerRef, 'ACTIVE',
+                                    :correlation)
                             ON CONFLICT (mandate_ref) DO NOTHING""")
                     .param("id", UUID.fromString(n.mandateId()))
                     .param("ref", n.mandateRef())

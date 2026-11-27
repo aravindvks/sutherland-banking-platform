@@ -38,7 +38,8 @@ public class ScheduleCommands {
                 str(d.get("kind")), str(d.get("frequency")), str(d.get("startDate")), str(d.get("endDate")),
                 str(d.get("debtorAccount")), str(creditor.get("name")), str(creditor.get("sortCode")),
                 str(creditor.get("accountNumber")), str(amount.get("value")), str(amount.get("currency")),
-                str(d.get("reference")), str(d.get("scheme")), str(d.get("copResult")));
+                str(d.get("reference")), str(d.get("scheme")), str(d.get("copResult")),
+                bank.pbp.common.market.AccountIdentifier.fromJson(creditor.get("account")));
         ScheduleWorkflow wf = temporal.newWorkflowStub(ScheduleWorkflow.class, WorkflowOptions.newBuilder()
                 .setTaskQueue(TaskQueues.PAYMENTS)
                 .setWorkflowId("schedule-" + r.scheduleId())
