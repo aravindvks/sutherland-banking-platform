@@ -9,6 +9,7 @@ import { PaymentDetail, PaymentList, Payments } from './modules/payments/Payment
 import { CardView } from './modules/cards/CardView';
 import CreditCardView from './modules/creditcards/CreditCard';
 import Staff from './staff/Staff';
+import { currencySymbol, market, setMarket } from './shared/market';
 
 const STORAGE_KEY = 'pbp.customerId';
 
@@ -95,6 +96,9 @@ function Bank({ customerId, notify, onSignOut }: { customerId: string; notify: (
   // Which modules this bank runs: their tabs and demo buttons only.
   const [modules, setModules] = useState<Modules>(null);
   useEffect(() => { api.modules().then((b) => setModules(toModules(b))).catch(() => setModules(null)); }, []);
+  // The market (currency, language, local time): money and dates follow it; the UK until it loads.
+  const [, setMarketInUse] = useState(market());
+  useEffect(() => { api.market().then((b) => setMarketInUse(setMarket(b))).catch(() => undefined); }, []);
   const tabs = (['home', 'payments', 'card', 'credit'] as Tab[])
     .filter((t) => (t === 'card' ? has(modules, 'cards') : t === 'credit' ? has(modules, 'creditcards') : true));
 
@@ -200,7 +204,7 @@ function Amount({ value }: { value: string | null | undefined }) {
   const [pounds, pence] = Math.abs(n).toFixed(2).split('.');
   return (
     <div className="hero-amount" aria-label={gbp(value)}>
-      {n < 0 ? '−' : ''}£{Number(pounds).toLocaleString('en-GB')}<span className="pence">.{pence}</span>
+      {n < 0 ? '−' : ''}{currencySymbol()}{Number(pounds).toLocaleString(market().locale)}<span className="pence">.{pence}</span>
     </div>
   );
 }

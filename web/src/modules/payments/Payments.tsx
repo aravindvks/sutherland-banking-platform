@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react';
 import { api, gbp, toDate, ApiError, type Cop, type Mandate, type Me, type Payment, type Schedule } from '../../shared/api';
 import { fmtDay } from '../../shared/format';
+import { currencySymbol, market, moneyShort, scheme, todayLocal } from '../../shared/market';
 import { journeyUrl } from '../../shared/observability';
 import { Pill, label, parseCreditor } from '../../shared/ui';
 
 const BANK_SORT = '200001';
-const todayUk = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
 const plusDays = (iso: string, n: number) => {
   const d = new Date(`${iso}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -22,7 +22,7 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
 }) {
   const [form, setForm] = useState({
     name: 'Arjun Mehta', sortCode: '040004', accountNumber: '12345678', amount: '15.00', reference: 'Dinner',
-    scheme: 'FPS' as 'FPS' | 'CHAPS', when: 'NOW' as When, date: plusDays(todayUk(), 1), frequency: 'MONTHLY', endDate: '',
+    scheme: 'FPS' as 'FPS' | 'CHAPS', when: 'NOW' as When, date: plusDays(todayLocal(), 1), frequency: 'MONTHLY', endDate: '',
   });
   const [cop, setCop] = useState<{ key: string; result: Cop; accepted: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,7 +62,7 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
     if (!canSend) return;
     setBusy(true);
     const creditor = { name: form.name.trim(), sortCode: sort, accountNumber: form.accountNumber };
-    const amount = { value: Number(form.amount).toFixed(2), currency: 'GBP' };
+    const amount = { value: Number(form.amount).toFixed(2), currency: market().currency };
     const copResult = checked.result.result === 'CLOSE_MATCH' ? 'CLOSE_MATCH' : checked.result.result;
     const scheme = sameBank ? undefined : form.scheme;
     try {
@@ -100,7 +100,7 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
           <label className="field">Payee name<input id="payee" required value={form.name} onChange={(e) => set({ name: e.target.value })} /></label>
           <label className="field">Sort code<input id="sort" required pattern="\d{2}-?\d{2}-?\d{2}" value={form.sortCode} onChange={(e) => set({ sortCode: e.target.value })} /></label>
           <label className="field">Account number<input id="acc" required pattern="\d{8}" value={form.accountNumber} onChange={(e) => set({ accountNumber: e.target.value })} /></label>
-          <label className="field">Amount (£)<input id="amount" required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={form.amount} onChange={(e) => set({ amount: e.target.value })} /></label>
+          <label className="field">Amount ({currencySymbol()})<input id="amount" required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={form.amount} onChange={(e) => set({ amount: e.target.value })} /></label>
           <label className="field">Reference<input id="ref" maxLength={18} value={form.reference} onChange={(e) => set({ reference: e.target.value })} /></label>
         </div>
         <div className="row wrap">
@@ -114,13 +114,13 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
           {!sameBank && (
             <span className="seg" role="group" aria-label="Scheme">
               <button type="button" aria-pressed={form.scheme === 'FPS'} onClick={() => set({ scheme: 'FPS' })}>Faster Payment · free</button>
-              <button type="button" aria-pressed={form.scheme === 'CHAPS'} onClick={() => set({ scheme: 'CHAPS' })}>CHAPS · £20, same day</button>
+              <button type="button" aria-pressed={form.scheme === 'CHAPS'} onClick={() => set({ scheme: 'CHAPS' })}>CHAPS · {moneyShort(scheme('CHAPS')?.fee ?? '20.00')}, same day</button>
             </span>
           )}
         </div>
         {form.when !== 'NOW' && (
           <div className="form">
-            <label className="field">{form.when === 'LATER' ? 'Pay on' : 'First payment'}<input id="date" type="date" required min={todayUk()} value={form.date} onChange={(e) => set({ date: e.target.value })} /></label>
+            <label className="field">{form.when === 'LATER' ? 'Pay on' : 'First payment'}<input id="date" type="date" required min={todayLocal()} value={form.date} onChange={(e) => set({ date: e.target.value })} /></label>
             {form.when === 'REPEAT' && (
               <>
                 <label className="field">How often
@@ -134,7 +134,7 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
             )}
           </div>
         )}
-        {!sameBank && form.scheme === 'CHAPS' && <p className="muted small">CHAPS runs 06:00–17:30 UK time on working days; outside those hours the payment waits for the next opening. Payments of £10,000 or more are checked by our team first.</p>}
+        {!sameBank && form.scheme === 'CHAPS' && <p className="muted small">CHAPS runs {scheme('CHAPS')?.opens ?? '06:00'}–{scheme('CHAPS')?.cutOff ?? '17:30'} {market().code.toUpperCase()} time on working days; outside those hours the payment waits for the next opening. Payments of {moneyShort(market().limits.reviewThreshold)} or more are checked by our team first.</p>}
         {r && (
           <div className={`alert ${r.result === 'MATCH' ? 'ok' : r.result === 'NO_MATCH' ? 'bad' : 'warn'}`} role="status">
             {r.result === 'MATCH' && <><strong>Name matches.</strong> The account is held by {form.name.trim()}.</>}
@@ -270,7 +270,7 @@ export function PaymentList({ payments, open }: { payments: Payment[]; open: (id
               <tr key={p.paymentId} className="click" tabIndex={0} onClick={() => open(p.paymentId)} onKeyDown={(e) => e.key === 'Enter' && open(p.paymentId)}>
                 <td>
                   <div>{inbound ? `From ${c.debtorName ?? 'another bank'}` : `To ${c.name ?? '—'}`}</div>
-                  <div className="meta">{label(p.paymentType, c.scheme)}{p.scheduleId ? ' · standing order' : ''} · {toDate(p.createdAt).toLocaleString('en-GB')}</div>
+                  <div className="meta">{label(p.paymentType, c.scheme)}{p.scheduleId ? ' · standing order' : ''} · {toDate(p.createdAt).toLocaleString(market().locale)}</div>
                 </td>
                 <td><Pill status={p.status} /></td>
                 <td className={`amt num ${inbound ? 'in' : ''}`}>{inbound ? '+' : '−'}{gbp(p.amount)}</td>
@@ -340,7 +340,7 @@ export function PaymentDetail({ id, back, customerId, notify }: { id: string; ba
           <ol className="timeline">
             {p.history?.map((h, i) => (
               <li key={i} className={['REJECTED', 'FAILED', 'FLAGGED'].includes(h.to) ? 'bad' : ''}>
-                <span className="meta">{toDate(h.at).toLocaleTimeString('en-GB')} · {h.actor}</span>
+                <span className="meta">{toDate(h.at).toLocaleTimeString(market().locale)} · {h.actor}</span>
                 <strong>{h.to}</strong>{h.reason ? ` — ${h.reason}` : ''}
               </li>
             ))}
