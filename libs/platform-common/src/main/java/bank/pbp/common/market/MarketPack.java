@@ -12,8 +12,7 @@ import java.util.Optional;
  * the pack instead of knowing which country it runs in.
  *
  * <p>Stage 1 of the design moves the UK's rules into the UK pack step by step without changing behaviour. This
- * interface grows with those steps: payment routing (step 5), identity and reporting arrive with the code that
- * uses them.
+ * interface grows with those steps: identity and reporting arrive with the code that uses them.
  */
 public interface MarketPack {
 
@@ -42,6 +41,9 @@ public interface MarketPack {
     default Optional<PaymentScheme> paymentScheme(String code) {
         return paymentSchemes().stream().filter(s -> s.code().equals(code)).findFirst();
     }
+
+    /** Chooses the scheme for each payment from {@link #paymentSchemes()}. */
+    PaymentRouter router();
 
     /** Payment and card limits, in {@link #currency()}. */
     Limits limits();

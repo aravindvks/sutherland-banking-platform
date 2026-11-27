@@ -204,9 +204,20 @@ The pack (`markets/<code>`, behind `bank.pbp.common.market.MarketPack`) holds th
 business calendar, account identifiers, payment schemes and their hours, limits and fees, name check and Direct
 Debit scheme. Deploy with the same `PBP_MARKET`: a service whose built-in pack differs refuses to start.
 
-Stage 1 moves today's UK rules into `markets/uk` step by step, with no change in behaviour. **Step 1 (this
-release)**: the interface and the UK pack exist and are built into the orchestrator and the BFF, but nothing uses
-them yet. Test `ChapsWindowParityTest` proves the pack's CHAPS hours answer exactly as `ChapsWindow` does.
+Stage 1 moves today's UK rules into `markets/uk` step by step, with no change in behaviour. Done so far:
+
+1. The interface and the UK pack, built into every service and simulator.
+2. Currency, UK time, holidays, limits and fees come from the pack instead of being written into each service.
+3. Account identifiers: the BFF takes `creditor.account {scheme, fields}` as well as the original sort code and
+   account number, and commands carry both.
+4. Storage: `name_check_result`, `creditor_account`, `account_identifier` and `originator_id` sit beside the old
+   columns; the code writes both and reads the new one, falling back to the old.
+5. Routing: the pack's `PaymentRouter` chooses the scheme (UK: same sort code → INTERNAL; CHAPS when the customer
+   chose it; otherwise Faster Payments), and the limit and fee come from the routed scheme. CHAPS hours are the
+   pack's `OperatingWindow`; the old `ChapsWindow` class is gone. `UkPaymentRouterTest` checks the router against
+   the old rule, and `PaymentRoutingTest` checks limits, fees and error messages.
+
+Steps 6 to 8 (forms from `GET /v1/market`, full smoke tests, then dropping the old columns) are still to come.
 The US, Colombia, Jamaica and UAE packs are designed, not built.
 
 ## Observability (LLD section 15)

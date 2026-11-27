@@ -7,6 +7,7 @@ import bank.pbp.common.events.EventPublisher;
 import bank.pbp.common.events.Topics;
 import bank.pbp.common.ids.Ids;
 import bank.pbp.common.ids.JourneyType;
+import bank.pbp.common.market.MarketPack;
 import bank.pbp.orchestrator.payments.PaymentCommand;
 import bank.pbp.orchestrator.payments.PaymentCommandListener;
 import bank.pbp.orchestrator.schedules.ScheduleWorkflow.ScheduleRequest;
@@ -34,13 +35,15 @@ public class ScheduleActivitiesImpl implements ScheduleWorkflow.ScheduleActiviti
     private final EventPublisher events;
     private final ObjectMapper mapper;
     private final String bankSortCode;
+    private final MarketPack market;
 
     public ScheduleActivitiesImpl(JdbcClient jdbc, EventPublisher events, ObjectMapper mapper,
-                                  @Value("${pbp.bank.sort-code}") String bankSortCode) {
+                                  @Value("${pbp.bank.sort-code}") String bankSortCode, MarketPack market) {
         this.jdbc = jdbc;
         this.events = events;
         this.mapper = mapper;
         this.bankSortCode = bankSortCode;
+        this.market = market;
     }
 
     @Override
@@ -95,7 +98,7 @@ public class ScheduleActivitiesImpl implements ScheduleWorkflow.ScheduleActiviti
                 r.amount(),
                 r.currency(),
                 r.reference(),
-                PaymentCommandListener.paymentType(bankSortCode, r.creditorSortCode(), r.scheme()),
+                PaymentCommandListener.paymentType(market, bankSortCode, r.account(), r.scheme(), r.amount()),
                 "schedule:" + r.scheduleId() + ":" + index,
                 Instant.now().truncatedTo(ChronoUnit.MICROS).toString(),
                 r.copResult(),

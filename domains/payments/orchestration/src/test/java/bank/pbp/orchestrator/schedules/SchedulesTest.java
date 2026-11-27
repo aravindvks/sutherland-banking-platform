@@ -2,11 +2,13 @@ package bank.pbp.orchestrator.schedules;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import bank.pbp.orchestrator.payments.ChapsWindow;
+import bank.pbp.common.market.BusinessCalendar;
+import bank.pbp.common.market.OperatingWindow;
 import bank.pbp.orchestrator.schedules.ScheduleWorkflow.ScheduleRequest;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -49,14 +51,18 @@ class SchedulesTest {
 
     @Test
     void chapsOpensOnTheNextBusinessDayAfterTheCutOff() {
-        ChapsWindow w = new ChapsWindow(LocalTime.of(6, 0), LocalTime.of(17, 30), Set.of(LocalDate.parse("2026-12-25")));
+        // The UK pack's CHAPS window (ChapsWindow before Stage 1 step 5).
+        OperatingWindow w = OperatingWindow.businessHours(LocalTime.of(6, 0), LocalTime.of(17, 30));
+        BusinessCalendar cal = BusinessCalendar.saturdaySunday(Set.of(LocalDate.parse("2026-12-25")));
+        ZoneId uk = ZoneId.of("Europe/London");
         // Thursday 24 December 2026, 18:00 GMT: closed; Friday is Christmas Day, then the weekend.
         Instant evening = Instant.parse("2026-12-24T18:00:00Z");
-        assertThat(w.isOpen(evening)).isFalse();
-        assertThat(w.nextOpening(evening)).isEqualTo(Instant.parse("2026-12-28T06:00:00Z"));
+        assertThat(w.isOpen(evening, uk, cal)).isFalse();
+        assertThat(w.nextOpening(evening, uk, cal)).isEqualTo(Instant.parse("2026-12-28T06:00:00Z"));
         // Monday 9 November 2026, 10:00 GMT: open.
-        assertThat(w.isOpen(Instant.parse("2026-11-09T10:00:00Z"))).isTrue();
+        assertThat(w.isOpen(Instant.parse("2026-11-09T10:00:00Z"), uk, cal)).isTrue();
         // Saturday morning waits for Monday.
-        assertThat(w.nextOpening(Instant.parse("2026-11-07T09:00:00Z"))).isEqualTo(Instant.parse("2026-11-09T06:00:00Z"));
+        assertThat(w.nextOpening(Instant.parse("2026-11-07T09:00:00Z"), uk, cal))
+                .isEqualTo(Instant.parse("2026-11-09T06:00:00Z"));
     }
 }
