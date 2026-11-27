@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError, auth, authHeaders, gbp, toDate } from '../shared/api';
 import { dashboardUrl, journeyUrl } from '../shared/observability';
 import { has, toModules, type Modules } from '../shared/modules';
+import { market, setMarket, type Market } from '../shared/market';
 
 /** A correlation ID that opens its journey in Grafana when VITE_GRAFANA_URL is set; plain text otherwise. */
 function Cid({ id }: { id?: string | null }) {
@@ -40,8 +41,10 @@ export default function Staff({ notify }: { notify: (m: string) => void }) {
   const [exceptions, setExceptions] = useState<Row[]>([]);
   // Which modules this bank runs: only their panels (credit cards and reconciliation can be switched off).
   const [modules, setModules] = useState<Modules>(null);
+  const [, setMarketInUse] = useState(market());
   useEffect(() => {
     staffFetch<{ modules: string[] }>('/v1/modules', staff).then((b) => setModules(toModules(b))).catch(() => setModules(null));
+    staffFetch<Partial<Market>>('/v1/market', staff).then((b) => setMarketInUse(setMarket(b))).catch(() => undefined);
   }, [staff]);
   const recon = has(modules, 'recon');
 
@@ -362,4 +365,4 @@ export default function Staff({ notify }: { notify: (m: string) => void }) {
   );
 }
 
-const fmt = (t?: string | null) => (t ? toDate(t).toLocaleString('en-GB') : '—');
+const fmt = (t?: string | null) => (t ? toDate(t).toLocaleString(market().locale) : '—');

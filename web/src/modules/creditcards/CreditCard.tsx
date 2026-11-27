@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, gbp, ApiError, type CreditCards, type Me } from '../../shared/api';
+import { currencySymbol, market } from '../../shared/market';
 
 // Credit card on Thredd credit processing: apply, read the offer, accept, then use and repay it.
 // The limit and APR come from the decision engine; balance, available credit and statements from Thredd.
@@ -57,10 +58,10 @@ function Apply({ me, customerId, notify, after }: { me: Me; customerId: string; 
           <select value={f.employmentStatus} onChange={set('employmentStatus')}>
             {['EMPLOYED', 'SELF_EMPLOYED', 'RETIRED', 'STUDENT', 'UNEMPLOYED'].map((v) => <option key={v} value={v}>{v.replace('_', ' ').toLowerCase()}</option>)}
           </select></label>
-        <label className="field">Annual income (£)<input inputMode="decimal" value={f.annualIncome} onChange={set('annualIncome')} required /></label>
-        <label className="field">Rent or mortgage per month (£)<input inputMode="decimal" value={f.monthlyHousing} onChange={set('monthlyHousing')} /></label>
-        <label className="field">Other credit repayments per month (£)<input inputMode="decimal" value={f.monthlyCommitments} onChange={set('monthlyCommitments')} /></label>
-        <label className="field">Credit limit you would like (£)<input inputMode="decimal" value={f.requestedLimit} onChange={set('requestedLimit')} required /></label>
+        <label className="field">Annual income ({currencySymbol()})<input inputMode="decimal" value={f.annualIncome} onChange={set('annualIncome')} required /></label>
+        <label className="field">Rent or mortgage per month ({currencySymbol()})<input inputMode="decimal" value={f.monthlyHousing} onChange={set('monthlyHousing')} /></label>
+        <label className="field">Other credit repayments per month ({currencySymbol()})<input inputMode="decimal" value={f.monthlyCommitments} onChange={set('monthlyCommitments')} /></label>
+        <label className="field">Credit limit you would like ({currencySymbol()})<input inputMode="decimal" value={f.requestedLimit} onChange={set('requestedLimit')} required /></label>
       </div>
       <label className="row"><input type="checkbox" checked={f.consentToSoftSearch}
         onChange={(e) => setF({ ...f, consentToSoftSearch: e.target.checked })} /> I agree to a soft credit search</label>
@@ -142,7 +143,7 @@ function Account({ me, customerId, account, notify, after }: {
             return `Repayment of ${gbp(amount)} sent · ${r.correlationId}`;
           });
         }}>
-          <input className="grow" inputMode="decimal" placeholder="Amount (£)" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Repayment amount" />
+          <input className="grow" inputMode="decimal" placeholder={`Amount (${currencySymbol()})`} value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Repayment amount" />
           <button className="btn primary" disabled={!me.account || !amount}>Repay from current account</button>
         </form>
         {stmt && <div className="row">
@@ -152,7 +153,7 @@ function Account({ me, customerId, account, notify, after }: {
         {canWithdraw && <button className="btn small" onClick={() => run(async () => {
           await api.withdrawCreditCard(customerId, account.accountId);
           return 'Withdrawal requested';
-        })}>Withdraw from the agreement (until {new Date(account.withdrawUntil).toLocaleDateString('en-GB')})</button>}
+        })}>Withdraw from the agreement (until {new Date(account.withdrawUntil).toLocaleDateString(market().locale)})</button>}
       </section>
       <section className="panel stack">
         <h2>Statements</h2>

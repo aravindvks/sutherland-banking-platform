@@ -1,4 +1,5 @@
 // Thin client for the BFF (/v1) and, for the demo toolbar only, the vendor simulator (/sim).
+import { money, type Market } from './market';
 
 export type Me = {
   customerId: string;
@@ -123,6 +124,7 @@ async function request<T>(path: string, init: RequestInit = {}, customerId?: str
 
 export const api = {
   modules: () => request<{ modules: string[] }>('/v1/modules'),
+  market: () => request<Partial<Market>>('/v1/market'),
   me: (customerId?: string) => request<Me>('/v1/me', {}, customerId),
   payments: (customerId: string) => request<Payment[]>('/v1/payments', {}, customerId),
   payment: (paymentId: string) => request<Payment>(`/v1/payments/${paymentId}`),
@@ -183,8 +185,8 @@ export const demo = {
   sanctionsHit: (caseId: string) => request(`/sim/atfinity/v1/sim/cases/${caseId}/rescreen-hit`, { method: 'POST' }),
 };
 
-export const gbp = (v: string | null | undefined) =>
-  v == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(Number(v));
+/** Money in the market's currency (GBP in the UK); the name stays for the screens that already use it. */
+export const gbp = (v: string | null | undefined) => money(v);
 
 /** Parses PostgreSQL timestamp text ("2026-11-06 13:55:02.1+00") as well as ISO 8601. */
 export const toDate = (t: string) => new Date(t.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00'));

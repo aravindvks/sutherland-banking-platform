@@ -58,6 +58,16 @@ for m in onboarding payments compliance cards creditcards recon; do
   fi
 done
 pass "BFF $bm, orchestrator $om"
+
+step "Market: the BFF describes the market this build is for (docs/design/market-packs.md)"
+wantm=${PBP_MARKET:-uk}
+mk=$(curl -sf "$BFF/v1/market" -H "$PRIYA_H") || fail "GET /v1/market failed"
+echo "$mk" | grep -q "\"code\":\"$wantm\"" || fail "/v1/market should be $wantm; says $mk"
+if [ "$wantm" = uk ]; then
+  echo "$mk" | grep -q '"currency":"GBP"' && echo "$mk" | grep -q '"zone":"Europe/London"' && echo "$mk" | grep -q '"CHAPS"' \
+    || fail "UK market should be GBP, Europe/London, with CHAPS; says $mk"
+fi
+pass "Market $wantm: $(echo "$mk" | grep -o '"currency":"[A-Z]*"')"
 # A module that is off has no routes at all: each answers 404.
 off_route() {  # module, method, path, header, label
   case ",$want," in *",$1,"*) return 0 ;; esac
