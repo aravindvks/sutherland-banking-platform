@@ -167,7 +167,7 @@ public class EssenceController {
     }
 
     public record Money(@NotBlank @Pattern(regexp = "\\d{1,15}\\.\\d{2}") String value,
-                        @NotBlank @Pattern(regexp = "GBP") String currency) {
+                        @NotBlank @bank.pbp.common.market.MarketCurrency String currency) {
     }
 
     public record Creditor(String name,

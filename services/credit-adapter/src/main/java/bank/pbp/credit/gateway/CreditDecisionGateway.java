@@ -11,7 +11,7 @@ public interface CreditDecisionGateway {
 
     Decision decide(Application application, String idempotencyKey);
 
-    /** What the applicant told us. Money as decimal strings (GBP). */
+    /** What the applicant told us. Money as decimal strings (market currency). */
     record Application(String applicationId, String customerId, String name, String product, String annualIncome,
                        String employmentStatus, String monthlyHousing, String monthlyCommitments,
                        String requestedLimit) {

@@ -49,10 +49,14 @@ public class ReconEngine {
     private final RestClient orchestrator;
     private final RestClient ehi;
 
+    private final String currency;
+
     public ReconEngine(JdbcClient jdbc, RestClient.Builder builder,
                        @Value("${pbp.services.essence-adapter-url}") String essenceUrl,
                        @Value("${pbp.services.orchestrator-url}") String orchestratorUrl,
-                       @Value("${pbp.services.ehi-url}") String ehiUrl) {
+                       @Value("${pbp.services.ehi-url}") String ehiUrl,
+                       bank.pbp.common.market.MarketPack market) {
+        this.currency = market.currency().getCurrencyCode();
         this.jdbc = jdbc;
         SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
         f.setConnectTimeout(2000);
@@ -165,8 +169,8 @@ public class ReconEngine {
         for (String[] m : r.matches) {
             jdbc.sql("""
                             INSERT INTO recon_match (run_id, source_ref, target_ref, amount, currency, correlation_id, run_date)
-                            VALUES (:run, :src, :tgt, :amount, 'GBP', :corr, :date)""")
-                    .param("run", runId).param("src", m[0]).param("tgt", m[1]).param("amount", new BigDecimal(m[2]))
+                            VALUES (:run, :src, :tgt, :amount, :currency, :corr, :date)""")
+                    .param("currency", currency).param("run", runId).param("src", m[0]).param("tgt", m[1]).param("amount", new BigDecimal(m[2]))
                     .param("corr", m[3]).param("date", date).update();
         }
         for (String[] x : r.exceptions) {

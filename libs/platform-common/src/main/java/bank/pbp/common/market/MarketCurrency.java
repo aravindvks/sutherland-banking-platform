@@ -1,4 +1,4 @@
-package bank.pbp.bff.payments;
+package bank.pbp.common.market;
 
 import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
@@ -9,7 +9,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * The amount must be in the deployment's market currency (the market pack's; GBP in the UK). Replaces the fixed
+ * A currency field must be the deployment's market currency (the market pack's; GBP in the UK). Replaces the fixed
  * {@code @Pattern(regexp = "GBP")} (docs/design/market-packs.md, Stage 1 step 2).
  */
 @Documented

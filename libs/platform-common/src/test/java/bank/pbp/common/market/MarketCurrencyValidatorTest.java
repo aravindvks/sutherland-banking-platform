@@ -1,4 +1,4 @@
-package bank.pbp.bff.payments;
+package bank.pbp.common.market;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
@@ -6,7 +6,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import bank.pbp.common.market.MarketPack;
 import jakarta.validation.ConstraintValidatorContext;
 import java.util.Currency;
 import org.junit.jupiter.api.Test;

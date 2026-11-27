@@ -47,7 +47,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/thredd/v1/credit")
 public class ThreddCreditSimulator {
 
-    static final ZoneId UK = ZoneId.of("Europe/London");
     private static final BigDecimal MIN_FLOOR = new BigDecimal("5.00");
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -60,8 +59,12 @@ public class ThreddCreditSimulator {
     @SuppressWarnings("unused")
     private final SimulatorState state;
 
+    private final ZoneId zone;
+
     public ThreddCreditSimulator(WebhookSender webhooks, @Value("${sim.thredd.webhook-url}") String webhookUrl,
-                                 @Value("${sim.thredd.state-file:}") String stateFile, ObjectMapper mapper) {
+                                 @Value("${sim.thredd.state-file:}") String stateFile, ObjectMapper mapper,
+                                 bank.pbp.common.market.MarketPack market) {
+        this.zone = market.zone();   // statement and due dates in the market's local time
         this.webhooks = webhooks;
         this.webhookUrl = webhookUrl;
         this.state = new SimulatorState(stateFile, mapper, this::snapshot, this::restore);
@@ -247,11 +250,11 @@ public class ThreddCreditSimulator {
         BigDecimal balance = a.balance.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
         BigDecimal minimum = balance.multiply(new BigDecimal("0.01")).add(interest).add(a.feesThisCycle)
                 .setScale(2, RoundingMode.HALF_UP).max(MIN_FLOOR).min(balance);
-        LocalDate dueDate = LocalDate.now(UK).plusDays(Long.parseLong(str(req.getOrDefault("dueInDays", "25"))));
+        LocalDate dueDate = LocalDate.now(zone).plusDays(Long.parseLong(str(req.getOrDefault("dueInDays", "25"))));
         Instant dueAt = req.get("dueInSeconds") != null
                 ? Instant.now().plusSeconds(Long.parseLong(str(req.get("dueInSeconds"))))
-                : dueDate.atTime(LocalTime.of(23, 59, 59)).atZone(UK).toInstant();
-        Statement s = new Statement("thr_stm_" + hex(), a.id, LocalDate.now(UK), balance, minimum, interest,
+                : dueDate.atTime(LocalTime.of(23, 59, 59)).atZone(zone).toInstant();
+        Statement s = new Statement("thr_stm_" + hex(), a.id, LocalDate.now(zone), balance, minimum, interest,
                 a.feesThisCycle, dueDate, dueAt);
         statements.put(s.id, s);
         a.lastStatementId = s.id;

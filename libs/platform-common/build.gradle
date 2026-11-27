@@ -12,7 +12,9 @@ dependencies {
     compileOnly 'org.springframework.boot:spring-boot-starter-jdbc'
     compileOnly 'io.micrometer:micrometer-core'
     compileOnly 'io.micrometer:micrometer-tracing'
+    compileOnly 'jakarta.validation:jakarta.validation-api'   // @MarketCurrency; services bring the validator
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'io.micrometer:micrometer-core'
+    testImplementation 'jakarta.validation:jakarta.validation-api'
 }

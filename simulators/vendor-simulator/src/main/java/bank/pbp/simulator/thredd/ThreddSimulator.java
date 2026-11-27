@@ -34,7 +34,11 @@ public class ThreddSimulator {
     private final RestClient ehi;
     private final String ehiUrl;
 
-    public ThreddSimulator(RestClient.Builder builder, @Value("${sim.thredd.ehi-url}") String ehiUrl) {
+    private final String currency;
+
+    public ThreddSimulator(RestClient.Builder builder, @Value("${sim.thredd.ehi-url}") String ehiUrl,
+                           bank.pbp.common.market.MarketPack market) {
+        this.currency = market.currency().getCurrencyCode();
         this.ehi = builder.build();
         this.ehiUrl = ehiUrl;
     }
@@ -89,7 +93,7 @@ public class ThreddSimulator {
         message.put("messageType", reverse ? "REVERSAL" : "PRESENTMENT");
         message.put("cardToken", String.valueOf(req.get("token")));
         message.put("amount", String.valueOf(req.get("amount")));
-        message.put("currency", "GBP");
+        message.put("currency", currency);
         message.put("originalMessageId", String.valueOf(req.get("messageId")));
         try {
             @SuppressWarnings("unchecked")
@@ -111,7 +115,7 @@ public class ThreddSimulator {
         message.put("messageType", "AUTHORISATION");
         message.put("cardToken", String.valueOf(tap.get("token")));
         message.put("amount", String.valueOf(tap.getOrDefault("amount", "3.50")));
-        message.put("currency", "GBP");
+        message.put("currency", currency);
         message.put("merchant", merchant);
         try {
             @SuppressWarnings("unchecked")
