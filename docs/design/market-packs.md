@@ -108,7 +108,7 @@ public interface PaymentRouter {
 
 | Market | Same-bank | Instant | High value | Batch | Routing rules to encode |
 | --- | --- | --- | --- | --- | --- |
-| UK | Internal | Faster Payments | CHAPS (business days, bank cut-off before 18:00) | Bacs | As today: FPS up to the limit, CHAPS by choice or above it, queued outside CHAPS hours |
+| UK | Internal | Faster Payments | CHAPS (business days, bank cut-off before 18:00) | Bacs | As today: same sort code → Internal; CHAPS when the customer chooses it, otherwise Faster Payments; each scheme's own limit and fee; CHAPS queued outside its hours. A Faster Payment above its limit is rejected, not moved to CHAPS |
 | US | Internal | RTP, FedNow | Fedwire | ACH (same day and next day) | Instant where the receiving bank takes it; ACH otherwise; Fedwire for high value and by choice |
 | Colombia | Internal | Bre-B (live since 6 October 2025, run by Banco de la República) | CUD (the central bank's large-value system) | ACH Colombia, CENIT | Bre-B by default; ACH where the receiving institution is not on Bre-B |
 | Jamaica | Internal | — (no national instant system) | JamClear-RTGS (Bank of Jamaica) | ACH (operated by JETS) | Transfers of J$1 million and above go to RTGS; below that, ACH |
@@ -116,7 +116,7 @@ public interface PaymentRouter {
 
 Large-value system names (CUD in Colombia) and each market's cut-offs, limits and fees are confirmed with the client bank before a pack is called ready (section 7).
 
-The orchestrator's payment workflow keeps its steps: check, name check, debit, send, wait for the result, release or reverse. Only "which scheme" and "is it open now" move into the pack. `ChapsWindow` becomes the UK pack's `OperatingWindow` for CHAPS, unchanged in behaviour.
+The orchestrator's payment workflow keeps its steps: check, name check, debit, send, wait for the result, release or reverse. Only "which scheme" and "is it open now" move into the pack. `ChapsWindow` becomes the UK pack's `OperatingWindow` for CHAPS, unchanged in behaviour (done in Stage 1 step 5). The workflow still calls its `chapsWindow` activity by that name, so payments already queued replay unchanged; a general `schemeWindow(code)` activity, introduced behind a Temporal version marker, comes with the first pack that has a second scheme with hours.
 
 ### 4.3 Name check
 

@@ -46,9 +46,7 @@ public class PaymentActivitiesImpl implements PaymentActivities {
     private final ObjectMapper mapper;
     private final RestClient essence;
     private final BigDecimal singleLimit;
-    private final BigDecimal chapsLimit;
     private final BigDecimal reviewThreshold;
-    private final BigDecimal chapsFee;
     private final MarketPack market;
     private final PaymentScheme chaps;
     private final String currency;
@@ -65,16 +63,14 @@ public class PaymentActivitiesImpl implements PaymentActivities {
         f.setConnectTimeout(1000);
         f.setReadTimeout(12_000);
         this.essence = builder.clone().baseUrl(essenceUrl).requestFactory(f).build();
-        // Limits, the CHAPS fee and hours come from the market pack (docs/design/market-packs.md, Stage 1 step 2);
-        // the UK pack reads the same pbp.payments.* keys these fields were read from before.
+        // Limits, fees and the CHAPS hours come from the market pack (docs/design/market-packs.md, Stage 1 steps 2
+        // and 5); the UK pack reads the same pbp.payments.* keys these fields were read from before.
         this.market = market;
         this.chaps = market.paymentScheme("CHAPS").orElseThrow(
                 () -> new IllegalStateException("market pack '" + market.code() + "' has no CHAPS scheme"));
         this.currency = market.currency().getCurrencyCode();
         this.singleLimit = market.limits().singlePayment();
-        this.chapsLimit = chaps.limit().orElseThrow();
         this.reviewThreshold = market.limits().reviewThreshold();
-        this.chapsFee = chaps.fee();
     }
 
     @Override
@@ -133,14 +129,17 @@ public class PaymentActivitiesImpl implements PaymentActivities {
             if (amount.signum() <= 0) {
                 return RiskResult.fail("GEN-VALID-001", "Amount must be greater than zero");
             }
-            boolean isChaps = "CHAPS".equals(c.paymentType());
-            BigDecimal limit = isChaps ? chapsLimit : singleLimit;
+            // The routed scheme's own limit and fee. In the UK: same-bank and Faster Payments share the
+            // single-payment limit and are free; CHAPS has its own limit and fee.
+            PaymentScheme scheme = market.paymentScheme(c.paymentType()).orElse(null);
+            BigDecimal limit = scheme == null ? singleLimit : scheme.limit().orElse(singleLimit);
+            String limitName = scheme == null || scheme.instant() ? "single-payment" : scheme.name();
             if (amount.compareTo(limit) > 0) {
                 return RiskResult.fail("PAY-LIMIT-001", "Requested " + c.amount() + " " + currency + " exceeds the "
-                        + (isChaps ? "CHAPS" : "single-payment") + " limit " + limit.toPlainString() + " " + currency);
+                        + limitName + " limit " + limit.toPlainString() + " " + currency);
             }
             boolean review = amount.compareTo(reviewThreshold) >= 0;
-            return RiskResult.pass(review, isChaps ? chapsFee.setScale(2).toPlainString() : "0.00");
+            return RiskResult.pass(review, scheme == null ? "0.00" : scheme.fee().setScale(2).toPlainString());
         });
     }
 

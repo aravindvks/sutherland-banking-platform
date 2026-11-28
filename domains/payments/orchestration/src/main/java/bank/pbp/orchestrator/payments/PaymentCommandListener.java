@@ -3,12 +3,16 @@ package bank.pbp.orchestrator.payments;
 import bank.pbp.common.events.EventEnvelope;
 import bank.pbp.common.events.EventPublisher;
 import bank.pbp.common.events.Topics;
+import bank.pbp.common.market.AccountIdentifier;
+import bank.pbp.common.market.MarketPack;
+import bank.pbp.common.market.PaymentIntent;
 import bank.pbp.orchestrator.directdebits.DirectDebitCommands;
 import bank.pbp.orchestrator.schedules.ScheduleCommands;
 import bank.pbp.orchestrator.temporal.TaskQueues;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowExecutionAlreadyStarted;
 import io.temporal.client.WorkflowOptions;
+import java.math.BigDecimal;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,15 +40,17 @@ public class PaymentCommandListener {
     private final ScheduleCommands schedules;
     private final DirectDebitCommands directDebits;
     private final String bankSortCode;
+    private final MarketPack market;
 
     public PaymentCommandListener(WorkflowClient temporal, EventPublisher events, ScheduleCommands schedules,
                                   DirectDebitCommands directDebits,
-                                  @Value("${pbp.bank.sort-code}") String bankSortCode) {
+                                  @Value("${pbp.bank.sort-code}") String bankSortCode, MarketPack market) {
         this.temporal = temporal;
         this.events = events;
         this.schedules = schedules;
         this.directDebits = directDebits;
         this.bankSortCode = bankSortCode;
+        this.market = market;
     }
 
     @KafkaListener(topics = Topics.PAYMENT_COMMANDS, groupId = "orchestrator-payments")
@@ -76,14 +82,24 @@ public class PaymentCommandListener {
     }
 
     /**
-     * The orchestrator decides the rail: this bank's sort code → INTERNAL; otherwise CHAPS when the
-     * customer chose it, else Faster Payments.
+     * The orchestrator decides the rail by asking the market pack's router (docs/design/market-packs.md, 4.2).
+     * In the UK: this bank's sort code → INTERNAL; otherwise CHAPS when the customer chose it, else Faster
+     * Payments.
+     *
+     * @param ownBank this bank's code in the market's identifier scheme (pbp.bank.sort-code in the UK)
+     * @param amount  decimal string; an unreadable amount routes as if absent and is rejected by the risk check
      */
-    public static String paymentType(String bankSortCode, String creditorSortCode, String requestedScheme) {
-        if (bankSortCode.equals(creditorSortCode)) {
-            return "INTERNAL";
+    public static String paymentType(MarketPack market, String ownBank, AccountIdentifier creditor,
+                                     String requestedScheme, String amount) {
+        return market.router().route(new PaymentIntent(ownBank, creditor, requestedScheme, decimal(amount))).code();
+    }
+
+    private static BigDecimal decimal(String value) {
+        try {
+            return value == null ? null : new BigDecimal(value);
+        } catch (NumberFormatException e) {
+            return null;
         }
-        return "CHAPS".equals(requestedScheme) ? "CHAPS" : "FPS";
     }
 
     @SuppressWarnings("unchecked")
@@ -92,6 +108,9 @@ public class PaymentCommandListener {
         Map<String, Object> creditor = (Map<String, Object>) d.get("creditor");
         Map<String, Object> amount = (Map<String, Object>) d.get("amount");
         String sortCode = str(creditor.get("sortCode"));
+        String accountNumber = str(creditor.get("accountNumber"));
+        AccountIdentifier account = AccountIdentifier.fromJson(creditor.get("account"));
+        AccountIdentifier routeTo = account != null ? account : AccountIdentifier.fromOriginalShape(sortCode, accountNumber);
         return new PaymentCommand(
                 str(d.get("paymentId")),
                 event.customerId(),
@@ -99,16 +118,16 @@ public class PaymentCommandListener {
                 str(d.get("debtorAccount")),
                 str(creditor.get("name")),
                 sortCode,
-                str(creditor.get("accountNumber")),
+                accountNumber,
                 str(amount.get("value")),
                 str(amount.get("currency")),
                 str(d.get("remittanceInfo")),
-                paymentType(bankSortCode, sortCode, str(d.get("scheme"))),
+                paymentType(market, bankSortCode, routeTo, str(d.get("scheme")), str(amount.get("value"))),
                 str(d.get("idempotencyKey")),
                 str(d.get("initiatedAt")),
                 str(d.get("copResult")),
                 null,
-                bank.pbp.common.market.AccountIdentifier.fromJson(creditor.get("account")));
+                account);
     }
 
     private static String str(Object value) {

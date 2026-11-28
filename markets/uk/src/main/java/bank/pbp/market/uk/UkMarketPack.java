@@ -7,6 +7,7 @@ import bank.pbp.common.market.Limits;
 import bank.pbp.common.market.MarketPack;
 import bank.pbp.common.market.NameCheck;
 import bank.pbp.common.market.OperatingWindow;
+import bank.pbp.common.market.PaymentRouter;
 import bank.pbp.common.market.PaymentScheme;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -32,6 +33,7 @@ public final class UkMarketPack implements MarketPack {
     private final BusinessCalendar calendar;
     private final List<PaymentScheme> schemes;
     private final Limits limits;
+    private final PaymentRouter router;
     private final AccountIdentifierScheme identifiers = new UkSortCodeScheme();
 
     /**
@@ -56,6 +58,7 @@ public final class UkMarketPack implements MarketPack {
                         Optional.of(singleLimit), BigDecimal.ZERO),
                 new PaymentScheme("CHAPS", "CHAPS", false, OperatingWindow.businessHours(chapsOpens, chapsCutOff),
                         Optional.of(chapsLimit), chapsFee));
+        this.router = new UkPaymentRouter(schemes);
     }
 
     /** Parses the comma-separated ISO dates used by pbp.payments.chaps.holidays; blanks are ignored. */
@@ -101,6 +104,11 @@ public final class UkMarketPack implements MarketPack {
     @Override
     public List<PaymentScheme> paymentSchemes() {
         return schemes;
+    }
+
+    @Override
+    public PaymentRouter router() {
+        return router;
     }
 
     @Override
