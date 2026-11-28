@@ -36,15 +36,24 @@ if curl -sf "$TEMPO/ready" >/dev/null 2>&1; then
     || fail "No single trace for $CORR spans $want. Traces seen:${seen:- none}. Check traceparent in the outbox and the Temporal interceptors"
 
   step "Tracing: a card tap is one trace from the EHI responder to the Essence hold"
-  found=""
-  # Up to 90 s: Tempo can take a while to make a new trace searchable on a busy CI runner (it failed once at 30 s).
+  found=""; seen=""
+  # Find the card-tap traces by their EHI request span, then read each whole trace by ID, as the payment check above
+  # does. A single TraceQL query asking for both spans found nothing now and then in CI, even after 90 s; the likely
+  # cause is Tempo holding one trace's spans in separate blocks, which a read by ID joins.
   for _ in $(seq 1 45); do
-    # The EHI request span and the Essence hold span in one trace (not, say, a reconciliation run that calls both).
-    t=$(traces '{ resource.service.name = "ehi-responder" && span.uri = "/ehi/v1/messages" } && { resource.service.name = "essence-adapter" && span.uri =~ ".*holds.*" }' | head -1)
-    [ -n "$t" ] && { found="$t ($(trace_services "$t"))"; break; }
+    seen=""
+    for t in $(traces '{ resource.service.name = "ehi-responder" && span.uri = "/ehi/v1/messages" }'); do
+      body=$(curl -s "$TEMPO/api/traces/$t")
+      svc=$(trace_services "$t"); seen="$seen [$t: $svc]"
+      # The EHI request and the Essence hold in one trace (not, say, a reconciliation run that calls both).
+      if has_all "$svc" "ehi-responder essence-adapter" && echo "$body" | grep -q 'holds'; then
+        found="$t ($svc)"; break 2
+      fi
+    done
     sleep 2
   done
-  [ -n "$found" ] && pass "Trace $found" || fail "No trace joins ehi-responder and essence-adapter within 90 s"
+  [ -n "$found" ] && pass "Trace $found" \
+    || fail "No trace joins ehi-responder and the Essence hold within 90 s. EHI traces seen:${seen:- none}"
 else
   echo "  SKIP Tempo not reachable at $TEMPO (observability stack not running)"
 fi
