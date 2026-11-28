@@ -44,14 +44,16 @@ case "$MARKET" in
   *) echo "No smoke test for market '$MARKET'"; exit 2 ;;
 esac
 
+# Priya's login and money first: every BFF call, /v1/market included, needs a signed-in customer.
+fx_priya
+
 step "The BFF describes the $MARKET market"
-m=$(curl -sf "$BFF/v1/market")
+m=$(curl -sf "$BFF/v1/market" -H "$PRIYA_H")
 [ "$(echo "$m" | field code)" = "$MARKET" ] && [ "$(echo "$m" | field currency)" = "$CUR" ] \
   && pass "GET /v1/market: $MARKET, $CUR" || fail "Expected $MARKET and $CUR, got $m"
 echo "$m" | grep -q '"nameCheck"' && fail "The $MARKET pack has no name check, but /v1/market lists one" \
   || pass "No payee name check in this market"
 
-fx_priya
 
 step "The market's account check refuses a bad payee account"
 code=$(curl -s -o /tmp/bad.json -w '%{http_code}' -X POST "$BFF/v1/payments" -H 'Content-Type: application/json' \
