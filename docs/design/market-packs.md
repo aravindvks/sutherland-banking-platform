@@ -114,7 +114,7 @@ public interface PaymentRouter {
 | Jamaica | Internal | — (no national instant system) | JamClear-RTGS (Bank of Jamaica) | ACH (operated by JETS) | Transfers of J$1 million and above go to RTGS; below that, ACH |
 | UAE | Internal | Aani (Al Etihad Payments, a Central Bank of the UAE subsidiary) | UAEFTS | — | Aani by default; UAEFTS for high value |
 
-Large-value system names (CUD in Colombia) and each market's cut-offs, limits and fees are confirmed with the client bank before a pack is called ready (section 7).
+Colombia's large-value system is confirmed as the Banco de la República's Sistema de Cuentas de Depósito (CUD). Each market's cut-offs, limits and fees are confirmed with the client bank before a pack is called ready (section 7).
 
 The orchestrator's payment workflow keeps its steps: check, name check, debit, send, wait for the result, release or reverse. Only "which scheme" and "is it open now" move into the pack. `ChapsWindow` becomes the UK pack's `OperatingWindow` for CHAPS, unchanged in behaviour (done in Stage 1 step 5). The workflow still calls its `chapsWindow` activity by that name, so payments already queued replay unchanged; a general `schemeWindow(code)` activity, introduced behind a Temporal version marker, comes with the first pack that has a second scheme with hours.
 
@@ -226,6 +226,8 @@ Suggested order: US (closest to the UK model, and Increase is ready), Jamaica (c
 3. Card processor for Colombia and the UAE.
 4. Arabic for the UAE pack from day one, or English first?
 5. Whether MCB's four jurisdictions are one pack with country settings or four small packs (decide after the Jamaica pack).
+7. Account field formats for Jamaica and Colombia (bank and branch codes, account number lengths): provisional and configurable in the packs until confirmed.
+8. Which institutions each instant network reaches (RTP and FedNow, Aani, Bre-B): the packs take a configured list until a directory lookup through the core is built.
 6. The CLAUDE.md rule "UK only": change it when Stage 1 starts, and record the change under "Corrections to the LLD" in the README.
 
 ## 8. Risks

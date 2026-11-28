@@ -1,0 +1,3 @@
+// The Colombia market pack (docs/design/market-packs.md): COP, Colombia time, Bre-B instant payments, ACH and the
+// Banco de la República's CUD. Upcoming: built and unit-tested, not yet run end to end on the simulators. Account
+// field formats are provisional until confirmed with the client bank.
