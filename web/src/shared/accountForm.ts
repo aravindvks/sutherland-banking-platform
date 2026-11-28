@@ -54,9 +54,9 @@ export const creditorBody = (name: string, values: Record<string, string>, m: Ma
 export const isSameBank = (values: Record<string, string>, ownSortCode: string, m: Market = market()) =>
   m.accountIdentifier.scheme === ORIGINAL_SHAPE_SCHEME && clean(values.sortCode) === ownSortCode;
 
-/** Schemes the customer can pick for another bank: every scheme but the same-bank one, the market's order. */
+/** Schemes the customer can pick for another bank, as the market lists them (the UK: Faster Payment, CHAPS). */
 export const schemeChoices = (m: Market = market()): PaymentScheme[] =>
-  m.paymentSchemes.filter((s) => s.code !== 'INTERNAL');
+  m.customerChoices?.length ? m.customerChoices : m.paymentSchemes.filter((s) => s.code !== 'INTERNAL');
 
 /** The scheme a payment uses unless the customer picks another: the first instant one (Faster Payments). */
 export const defaultScheme = (m: Market = market()): string =>
@@ -64,3 +64,11 @@ export const defaultScheme = (m: Market = market()): string =>
 
 /** A scheme with opening hours (CHAPS), which queues payments outside them. */
 export const hasHours = (s: PaymentScheme | undefined) => !!s && !s.alwaysOpen && !!s.opens && !!s.cutOff;
+
+/** A field whose rule is a list of words ("CHECKING|SAVINGS") is a choice, shown as a drop-down. */
+export const fieldOptions = (field: AccountField): string[] | null =>
+  /^[A-Z_]+(\|[A-Z_]+)+$/.test(field.pattern) ? field.pattern.split('|') : null;
+
+/** The button text for a scheme: "Faster Payment · free", "CHAPS · £20, same day". */
+export const choiceLabel = (s: PaymentScheme, name: string, fee: (v: string) => string) =>
+  `${name} · ${Number(s.fee) > 0 ? fee(s.fee) : 'free'}${hasHours(s) ? ', same day' : ''}`;

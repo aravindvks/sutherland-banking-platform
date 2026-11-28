@@ -16,6 +16,8 @@ export type Market = {
   zone: string;
   accountIdentifier: { scheme: string; fields: AccountField[] };
   paymentSchemes: PaymentScheme[];
+  /** What a customer paying another bank can pick, first the default; older BFFs leave it out. */
+  customerChoices?: PaymentScheme[];
   limits: { singlePayment: string; reviewThreshold: string; dailyCardSpend: string };
   nameCheck?: { name: string };
   directDebits?: { name: string; originatorIdName: string; guarantee: string };

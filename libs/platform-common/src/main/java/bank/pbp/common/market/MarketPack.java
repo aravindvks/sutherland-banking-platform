@@ -42,6 +42,15 @@ public interface MarketPack {
         return paymentSchemes().stream().filter(s -> s.code().equals(code)).findFirst();
     }
 
+    /**
+     * What a customer paying another bank can choose between, first one the default. Usually every scheme but
+     * same-bank (the UK: Faster Payments, CHAPS). A market can offer fewer, or name one choice for several schemes:
+     * the US offers "Instant payment", which the router sends by RTP or FedNow.
+     */
+    default List<PaymentScheme> customerChoices() {
+        return paymentSchemes().stream().filter(s -> !"INTERNAL".equals(s.code())).toList();
+    }
+
     /** Chooses the scheme for each payment from {@link #paymentSchemes()}. */
     PaymentRouter router();
 

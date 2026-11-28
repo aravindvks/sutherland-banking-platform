@@ -222,7 +222,19 @@ Stage 1 moves today's UK rules into `markets/uk` step by step, with no change in
    the same form and sends the original request shape.
 
 Steps 7 and 8 (full smoke tests, then dropping the old columns) are still to come.
-The US, Colombia, Jamaica and UAE packs are designed, not built.
+
+**Other markets (Stage 2), all upcoming.** "Ready" means built and tested end to end on the simulators; none is yet.
+
+| Market | Status |
+| --- | --- |
+| US (`markets/us`) | Pack built and unit-tested: ABA routing numbers with the check digit, RTP, FedNow, ACH and wires, USD, US Eastern time, Federal Reserve holidays. **Not yet runnable end to end** (see below) |
+| Jamaica, UAE, Colombia | Designed, not built |
+
+To run a US bank end to end, still to build: the payment workflow skipping the name check where the market has
+none, and queueing wires outside their hours (a general scheme-window activity behind a Temporal version marker);
+the Essence adapter and simulators accepting RTP, FedNow, ACH and wire; the bank's own routing number in place of
+`pbp.bank.sort-code`; and US onboarding fields. Limits, the wire fee and cut-off, and which banks each instant network
+reaches are placeholders in `pbp.market.us.*`, to confirm with the client bank.
 
 ## Observability (LLD section 15)
 

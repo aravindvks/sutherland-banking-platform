@@ -66,8 +66,8 @@ public class PaymentActivitiesImpl implements PaymentActivities {
         // Limits, fees and the CHAPS hours come from the market pack (docs/design/market-packs.md, Stage 1 steps 2
         // and 5); the UK pack reads the same pbp.payments.* keys these fields were read from before.
         this.market = market;
-        this.chaps = market.paymentScheme("CHAPS").orElseThrow(
-                () -> new IllegalStateException("market pack '" + market.code() + "' has no CHAPS scheme"));
+        // Only the UK has CHAPS; elsewhere the workflow never asks for its window (see chapsWindow).
+        this.chaps = market.paymentScheme("CHAPS").orElse(null);
         this.currency = market.currency().getCurrencyCode();
         this.singleLimit = market.limits().singlePayment();
         this.reviewThreshold = market.limits().reviewThreshold();
@@ -174,6 +174,9 @@ public class PaymentActivitiesImpl implements PaymentActivities {
     @Override
     public Window chapsWindow() {
         Instant now = Instant.now();
+        if (chaps == null) {
+            return new Window(true, now.atZone(market.zone()).toOffsetDateTime().toString(), 0);
+        }
         Instant opens = chaps.window().nextOpening(now, market.zone(), market.calendar());
         return new Window(chaps.window().isOpen(now, market.zone(), market.calendar()),
                 opens.atZone(market.zone()).toOffsetDateTime().toString(),

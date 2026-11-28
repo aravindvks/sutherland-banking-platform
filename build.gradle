@@ -32,7 +32,7 @@ ext.enabledModules = {
 // Market pack (docs/design/market-packs.md). A build carries exactly one country's rules:
 //   ./gradlew bootJar -Pmarket=uk      (or PBP_MARKET in the environment; default uk)
 // Deploy with the same PBP_MARKET: a service whose pack differs refuses to start (MarketGuard).
-ext.allMarkets = ['uk']
+ext.allMarkets = ['uk', 'us']
 ext.enabledMarket = {
     String chosen = (findProperty('market') ?: System.getenv('PBP_MARKET') ?: 'uk').trim().toLowerCase()
     if (!(chosen in allMarkets)) {
