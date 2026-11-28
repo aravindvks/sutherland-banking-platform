@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api, gbp, toDate, ApiError, type Cop, type Mandate, type Me, type Payment, type Schedule } from '../../shared/api';
 import { fmtDay } from '../../shared/format';
-import { accountFields, accountProblems, creditorBody, defaultScheme, exampleAccount, fieldId, hasHours, isSameBank, schemeChoices } from '../../shared/accountForm';
+import { accountFields, accountProblems, choiceLabel, creditorBody, defaultScheme, exampleAccount, fieldId, fieldOptions, hasHours, isSameBank, schemeChoices } from '../../shared/accountForm';
 import { currencySymbol, market, moneyShort, scheme, todayLocal } from '../../shared/market';
 import { journeyUrl } from '../../shared/observability';
 import { Pill, label, parseCreditor } from '../../shared/ui';
@@ -120,15 +120,24 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
           : <p className="muted">Payments go by {schemeChoices().map((s) => s.name).join(' or ')}.{nameCheck ? ` We check the name with the payee's bank first (${nameCheck.name}).` : ''}</p>}
         <div className="form">
           <label className="field">Payee name<input id="payee" required value={form.name} onChange={(e) => set({ name: e.target.value })} /></label>
-          {fields.map((f) => (
-            <label className="field" key={f.name}>{f.label}<input id={fieldId(f.name)} required value={form.account[f.name] ?? ''}
-              onChange={(e) => {
-                const account = { ...form.account, [f.name]: e.target.value };
-                // The market's rule (spaces and dashes ignored); the browser shows the hint, e.g. "must be 6 digits".
-                e.target.setCustomValidity(accountProblems(account).find(([n]) => n === f.name)?.[1] ?? '');
-                set({ account });
-              }} /></label>
-          ))}
+          {fields.map((f) => {
+            const options = fieldOptions(f);
+            return options ? (
+              <label className="field" key={f.name}>{f.label}
+                <select id={fieldId(f.name)} value={form.account[f.name] ?? options[0]} onChange={(e) => set({ account: { ...form.account, [f.name]: e.target.value } })}>
+                  {options.map((o) => <option key={o} value={o}>{o.charAt(0) + o.slice(1).toLowerCase()}</option>)}
+                </select>
+              </label>
+            ) : (
+              <label className="field" key={f.name}>{f.label}<input id={fieldId(f.name)} required value={form.account[f.name] ?? ''}
+                onChange={(e) => {
+                  const account = { ...form.account, [f.name]: e.target.value };
+                  // The market's rule (spaces and dashes ignored); the browser shows the hint, e.g. "must be 6 digits".
+                  e.target.setCustomValidity(accountProblems(account).find(([n]) => n === f.name)?.[1] ?? '');
+                  set({ account });
+                }} /></label>
+            );
+          })}
           <label className="field">Amount ({currencySymbol()})<input id="amount" required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={form.amount} onChange={(e) => set({ amount: e.target.value })} /></label>
           <label className="field">Reference<input id="ref" maxLength={18} value={form.reference} onChange={(e) => set({ reference: e.target.value })} /></label>
         </div>
@@ -144,7 +153,7 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
             <span className="seg" role="group" aria-label="Scheme">
               {schemeChoices().map((s) => (
                 <button type="button" key={s.code} aria-pressed={form.scheme === s.code} onClick={() => set({ scheme: s.code })}>
-                  {label(s.code) === s.code ? s.name : label(s.code)} · {Number(s.fee) > 0 ? moneyShort(s.fee) : 'free'}{s.instant ? '' : ', same day'}
+                  {choiceLabel(s, label(s.code) === s.code ? s.name : label(s.code), moneyShort)}
                 </button>
               ))}
             </span>

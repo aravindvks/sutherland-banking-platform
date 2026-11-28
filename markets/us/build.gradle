@@ -1,0 +1,3 @@
+// The US market pack (docs/design/market-packs.md): ABA routing numbers, RTP, FedNow, ACH and Fedwire, USD,
+// US Eastern time and the Federal Reserve holidays. Upcoming: built and unit-tested, not yet run end to end on the
+// simulators. Built into the apps when PBP_MARKET (or -Pmarket) is us.

@@ -27,6 +27,8 @@ class MarketControllerTest {
     @SuppressWarnings("unchecked")
     void schemesWithChapsHoursAndFee() {
         assertThat(MarketController.schemeCodes(uk)).containsExactly("INTERNAL", "FPS", "CHAPS");
+        assertThat((List<Map<String, Object>>) uk.get("customerChoices")).extracting(c -> c.get("code"))
+                .containsExactly("FPS", "CHAPS");
         Map<String, Object> chaps = ((List<Map<String, Object>>) uk.get("paymentSchemes")).get(2);
         assertThat(chaps).containsEntry("opens", "06:00").containsEntry("cutOff", "17:30")
                 .containsEntry("fee", "20.00").containsEntry("limit", "1000000.00").containsEntry("alwaysOpen", false);

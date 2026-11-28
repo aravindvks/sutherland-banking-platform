@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  accountProblems, creditorBody, defaultScheme, exampleAccount, fieldId, hasHours, isSameBank, schemeChoices,
+  accountProblems, choiceLabel, creditorBody, defaultScheme, exampleAccount, fieldId, fieldOptions, hasHours, isSameBank,
+  schemeChoices,
 } from './accountForm';
 import { UK, setMarket, type Market } from './market';
 
@@ -76,5 +77,32 @@ describe('another market', () => {
     expect(schemeChoices(other).map((s) => s.code)).toEqual(['WIRE', 'INSTANT']);
     expect(defaultScheme(other)).toBe('INSTANT');
     expect(isSameBank({ routingNumber: '200001' }, '200001', other)).toBe(false);
+  });
+});
+
+describe('choices and labels', () => {
+  const pounds = (v: string) => `£${Number(v)}`;
+
+  it('labels the UK buttons as before', () => {
+    const [fps, chaps] = schemeChoices(UK);
+    expect(choiceLabel(fps, 'Faster Payment', pounds)).toBe('Faster Payment · free');
+    expect(choiceLabel(chaps, 'CHAPS', pounds)).toBe('CHAPS · £20, same day');
+  });
+
+  it('uses the market’s own choices when it publishes them', () => {
+    const instant = { code: 'INSTANT', name: 'Instant payment', instant: true, alwaysOpen: true, fee: '0.00' };
+    expect(schemeChoices({ ...other, customerChoices: [instant] }).map((s) => s.code)).toEqual(['INSTANT']);
+    expect(schemeChoices({ ...UK, customerChoices: [] }).map((s) => s.code)).toEqual(['FPS', 'CHAPS']);
+  });
+
+  it('shows a word list as a drop-down and anything else as a text box', () => {
+    expect(fieldOptions({ name: 'accountType', label: 'Account type', pattern: 'CHECKING|SAVINGS', hint: '' }))
+      .toEqual(['CHECKING', 'SAVINGS']);
+    expect(fieldOptions(UK.accountIdentifier.fields[0])).toBeNull();
+  });
+
+  it('says same day only for a scheme with opening hours', () => {
+    const ach = { code: 'ACH', name: 'ACH transfer', instant: false, alwaysOpen: true, fee: '0.00' };
+    expect(choiceLabel(ach, 'ACH transfer', pounds)).toBe('ACH transfer · free');
   });
 });

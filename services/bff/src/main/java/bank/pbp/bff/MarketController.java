@@ -46,6 +46,8 @@ public class MarketController {
             return field;
         }).toList()));
         m.put("paymentSchemes", pack.paymentSchemes().stream().map(MarketController::scheme).toList());
+        // What a customer paying another bank can pick, the first being the default (the UK: Faster Payments, CHAPS).
+        m.put("customerChoices", pack.customerChoices().stream().map(MarketController::scheme).toList());
         m.put("limits", Map.of(
                 "singlePayment", money(pack.limits().singlePayment()),
                 "reviewThreshold", money(pack.limits().reviewThreshold()),
