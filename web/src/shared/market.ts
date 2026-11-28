@@ -7,11 +7,14 @@ export type PaymentScheme = {
   opens?: string; cutOff?: string; limit?: string; fee: string;
 };
 
+export type AccountField = { name: string; label: string; pattern: string; hint: string; example?: string };
+
 export type Market = {
   code: string;
   currency: string;
   locale: string;
   zone: string;
+  accountIdentifier: { scheme: string; fields: AccountField[] };
   paymentSchemes: PaymentScheme[];
   limits: { singlePayment: string; reviewThreshold: string; dailyCardSpend: string };
   nameCheck?: { name: string };
@@ -23,6 +26,13 @@ export const UK: Market = {
   currency: 'GBP',
   locale: 'en-GB',
   zone: 'Europe/London',
+  accountIdentifier: {
+    scheme: 'UK_SORT_CODE',
+    fields: [
+      { name: 'sortCode', label: 'Sort code', pattern: '\\d{6}', hint: 'must be 6 digits', example: '040004' },
+      { name: 'accountNumber', label: 'Account number', pattern: '\\d{8}', hint: 'must be 8 digits', example: '12345678' },
+    ],
+  },
   paymentSchemes: [
     { code: 'INTERNAL', name: 'Transfer within the bank', instant: true, alwaysOpen: true, limit: '25000.00', fee: '0.00' },
     { code: 'FPS', name: 'Faster Payments', instant: true, alwaysOpen: true, limit: '25000.00', fee: '0.00' },
@@ -40,7 +50,10 @@ export const market = () => current;
 /** Takes the BFF's answer; anything incomplete keeps the UK. Returns the market now in force. */
 export const setMarket = (body: Partial<Market> | null | undefined): Market => {
   if (body && body.currency && body.locale && body.zone && Array.isArray(body.paymentSchemes) && body.limits) {
-    current = { ...UK, ...body } as Market;
+    const ids = body.accountIdentifier;
+    // A BFF from before account fields were published keeps the UK fields.
+    const accountIdentifier = ids && ids.scheme && Array.isArray(ids.fields) && ids.fields.length ? ids : UK.accountIdentifier;
+    current = { ...UK, ...body, accountIdentifier } as Market;
   }
   return current;
 };

@@ -1,5 +1,6 @@
 // Thin client for the BFF (/v1) and, for the demo toolbar only, the vendor simulator (/sim).
 import { money, type Market } from './market';
+import type { Creditor } from './accountForm';
 
 export type Me = {
   customerId: string;
@@ -133,7 +134,7 @@ export const api = {
   signUp: (body: unknown) =>
     request<{ onboardingId: string; correlationId: string }>('/v1/onboarding', { method: 'POST', body: JSON.stringify(body) }),
   onboarding: (id: string) => request<Onboarding>(`/v1/onboarding/${id}`),
-  confirmPayee: (customerId: string, body: { name: string; sortCode: string; accountNumber: string }) =>
+  confirmPayee: (customerId: string, body: Creditor) =>
     request<Cop>('/v1/payees/confirm', { method: 'POST', body: JSON.stringify(body) }, customerId),
   schedules: (customerId: string) => request<Schedule[]>('/v1/schedules', {}, customerId),
   createSchedule: (customerId: string, body: unknown) =>

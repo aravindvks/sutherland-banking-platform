@@ -217,7 +217,11 @@ Stage 1 moves today's UK rules into `markets/uk` step by step, with no change in
    pack's `OperatingWindow`; the old `ChapsWindow` class is gone. `UkPaymentRouterTest` checks the router against
    the old rule, and `PaymentRoutingTest` checks limits, fees and error messages.
 
-Steps 6 to 8 (forms from `GET /v1/market`, full smoke tests, then dropping the old columns) are still to come.
+6. Forms: the web app's payment form takes its account fields, checks, scheme choices, fees, opening hours and
+   name check from `GET /v1/market` (`web/src/shared/accountForm.ts`, tested with `npm test`). In the UK it renders
+   the same form and sends the original request shape.
+
+Steps 7 and 8 (full smoke tests, then dropping the old columns) are still to come.
 The US, Colombia, Jamaica and UAE packs are designed, not built.
 
 ## Observability (LLD section 15)

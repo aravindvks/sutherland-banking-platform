@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api, gbp, toDate, ApiError, type Cop, type Mandate, type Me, type Payment, type Schedule } from '../../shared/api';
 import { fmtDay } from '../../shared/format';
+import { accountFields, accountProblems, creditorBody, defaultScheme, exampleAccount, fieldId, hasHours, isSameBank, schemeChoices } from '../../shared/accountForm';
 import { currencySymbol, market, moneyShort, scheme, todayLocal } from '../../shared/market';
 import { journeyUrl } from '../../shared/observability';
 import { Pill, label, parseCreditor } from '../../shared/ui';
@@ -21,15 +22,32 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
   open: (id: string) => void; notify: (m: string) => void; after: () => void;
 }) {
   const [form, setForm] = useState({
-    name: 'Arjun Mehta', sortCode: '040004', accountNumber: '12345678', amount: '15.00', reference: 'Dinner',
-    scheme: 'FPS' as 'FPS' | 'CHAPS', when: 'NOW' as When, date: plusDays(todayLocal(), 1), frequency: 'MONTHLY', endDate: '',
+    name: 'Arjun Mehta', account: exampleAccount(), amount: '15.00', reference: 'Dinner',
+    scheme: defaultScheme(), when: 'NOW' as When, date: plusDays(todayLocal(), 1), frequency: 'MONTHLY', endDate: '',
   });
   const [cop, setCop] = useState<{ key: string; result: Cop; accepted: boolean } | null>(null);
+  // The market arrives after the first render. If it is not the one the form started with (the UK), start again
+  // with its fields and default scheme; for the UK nothing changes.
+  const marketKey = `${market().code}|${market().accountIdentifier.scheme}`;
+  useEffect(() => {
+    setForm((f) => {
+      const names = accountFields().map((x) => x.name);
+      const sameFields = names.length === Object.keys(f.account).length && names.every((n) => n in f.account);
+      const schemeOk = schemeChoices().some((x) => x.code === f.scheme);
+      return sameFields && schemeOk ? f : { ...f, account: sameFields ? f.account : exampleAccount(), scheme: schemeOk ? f.scheme : defaultScheme() };
+    });
+  }, [marketKey]);
   const [busy, setBusy] = useState(false);
 
-  const sort = form.sortCode.replace(/\D/g, '');
-  const sameBank = sort === BANK_SORT;
-  const key = `${form.name.trim()}|${sort}|${form.accountNumber}`;
+  // The account fields, schemes and name check come from the market (GET /v1/market); in the UK, sort code and
+  // account number, Faster Payment or CHAPS, and Confirmation of Payee, as before.
+  const fields = accountFields();
+  const creditorFor = (name: string) => creditorBody(name, form.account);
+  const sameBank = isSameBank(form.account, BANK_SORT);
+  const accountKey = JSON.stringify(creditorFor(''));
+  const key = `${form.name.trim()}|${accountKey}`;
+  const nameCheck = market().nameCheck;
+  const chosen = scheme(form.scheme);
   const checked = cop && cop.key === key ? cop : null;
   const canSend = !!checked && (checked.result.result === 'MATCH' || checked.result.result === 'UNAVAILABLE'
     || (checked.result.result === 'CLOSE_MATCH' && checked.accepted));
@@ -38,7 +56,7 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
   const check = async () => {
     setBusy(true);
     try {
-      const r = await api.confirmPayee(customerId, { name: form.name.trim(), sortCode: sort, accountNumber: form.accountNumber });
+      const r = await api.confirmPayee(customerId, creditorFor(form.name.trim()));
       setCop({ key, result: r, accepted: false });
     } catch (err) {
       setCop({ key, result: { result: 'UNAVAILABLE' }, accepted: false });
@@ -52,18 +70,20 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
     const name = checked?.result.matchedName;
     if (!name) return;
     setForm({ ...form, name });
-    setCop({ key: `${name}|${sort}|${form.accountNumber}`, result: { result: 'MATCH' }, accepted: false });
+    setCop({ key: `${name}|${accountKey}`, result: { result: 'MATCH' }, accepted: false });
   };
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!me.account) return;
-    if (!checked) { await check(); return; }
-    if (!canSend) return;
+    if (accountProblems(form.account).length) return;
+    if (nameCheck && !checked) { await check(); return; }
+    if (nameCheck && !canSend) return;
     setBusy(true);
-    const creditor = { name: form.name.trim(), sortCode: sort, accountNumber: form.accountNumber };
+    const creditor = creditorFor(form.name.trim());
     const amount = { value: Number(form.amount).toFixed(2), currency: market().currency };
-    const copResult = checked.result.result === 'CLOSE_MATCH' ? 'CLOSE_MATCH' : checked.result.result;
+    // A market without a name check sends none; the payment workflow skips the step.
+    const copResult = checked ? checked.result.result : undefined;
     const scheme = sameBank ? undefined : form.scheme;
     try {
       if (form.when === 'NOW') {
@@ -95,11 +115,20 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
     <>
       <form className="panel stack" onSubmit={send}>
         <h2>Send money</h2>
-        <p className="muted">Sort code 20-00-01 is this bank (instant transfer). Others go by Faster Payments, or CHAPS for large same-day payments. We check the name with the payee's bank first (Confirmation of Payee). 99-xx-xx is rejected by the scheme; 98-xx-xx is a bank outside the name check.</p>
+        {market().code === 'uk'
+          ? <p className="muted">Sort code 20-00-01 is this bank (instant transfer). Others go by Faster Payments, or CHAPS for large same-day payments. We check the name with the payee's bank first (Confirmation of Payee). 99-xx-xx is rejected by the scheme; 98-xx-xx is a bank outside the name check.</p>
+          : <p className="muted">Payments go by {schemeChoices().map((s) => s.name).join(' or ')}.{nameCheck ? ` We check the name with the payee's bank first (${nameCheck.name}).` : ''}</p>}
         <div className="form">
           <label className="field">Payee name<input id="payee" required value={form.name} onChange={(e) => set({ name: e.target.value })} /></label>
-          <label className="field">Sort code<input id="sort" required pattern="\d{2}-?\d{2}-?\d{2}" value={form.sortCode} onChange={(e) => set({ sortCode: e.target.value })} /></label>
-          <label className="field">Account number<input id="acc" required pattern="\d{8}" value={form.accountNumber} onChange={(e) => set({ accountNumber: e.target.value })} /></label>
+          {fields.map((f) => (
+            <label className="field" key={f.name}>{f.label}<input id={fieldId(f.name)} required value={form.account[f.name] ?? ''}
+              onChange={(e) => {
+                const account = { ...form.account, [f.name]: e.target.value };
+                // The market's rule (spaces and dashes ignored); the browser shows the hint, e.g. "must be 6 digits".
+                e.target.setCustomValidity(accountProblems(account).find(([n]) => n === f.name)?.[1] ?? '');
+                set({ account });
+              }} /></label>
+          ))}
           <label className="field">Amount ({currencySymbol()})<input id="amount" required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={form.amount} onChange={(e) => set({ amount: e.target.value })} /></label>
           <label className="field">Reference<input id="ref" maxLength={18} value={form.reference} onChange={(e) => set({ reference: e.target.value })} /></label>
         </div>
@@ -113,8 +142,11 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
           </span>
           {!sameBank && (
             <span className="seg" role="group" aria-label="Scheme">
-              <button type="button" aria-pressed={form.scheme === 'FPS'} onClick={() => set({ scheme: 'FPS' })}>Faster Payment · free</button>
-              <button type="button" aria-pressed={form.scheme === 'CHAPS'} onClick={() => set({ scheme: 'CHAPS' })}>CHAPS · {moneyShort(scheme('CHAPS')?.fee ?? '20.00')}, same day</button>
+              {schemeChoices().map((s) => (
+                <button type="button" key={s.code} aria-pressed={form.scheme === s.code} onClick={() => set({ scheme: s.code })}>
+                  {label(s.code) === s.code ? s.name : label(s.code)} · {Number(s.fee) > 0 ? moneyShort(s.fee) : 'free'}{s.instant ? '' : ', same day'}
+                </button>
+              ))}
             </span>
           )}
         </div>
@@ -134,7 +166,7 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
             )}
           </div>
         )}
-        {!sameBank && form.scheme === 'CHAPS' && <p className="muted small">CHAPS runs {scheme('CHAPS')?.opens ?? '06:00'}–{scheme('CHAPS')?.cutOff ?? '17:30'} {market().code.toUpperCase()} time on working days; outside those hours the payment waits for the next opening. Payments of {moneyShort(market().limits.reviewThreshold)} or more are checked by our team first.</p>}
+        {!sameBank && hasHours(chosen) && <p className="muted small">{chosen!.name} runs {chosen!.opens}–{chosen!.cutOff} {market().code.toUpperCase()} time on working days; outside those hours the payment waits for the next opening. Payments of {moneyShort(market().limits.reviewThreshold)} or more are checked by our team first.</p>}
         {r && (
           <div className={`alert ${r.result === 'MATCH' ? 'ok' : r.result === 'NO_MATCH' ? 'bad' : 'warn'}`} role="status">
             {r.result === 'MATCH' && <><strong>Name matches.</strong> The account is held by {form.name.trim()}.</>}
@@ -154,7 +186,7 @@ export function Payments({ me, customerId, payments, schedules, mandates, open, 
         )}
         <div className="row">
           <button className="btn primary" disabled={busy || me.status !== 'ACTIVE' || (!!checked && !canSend)}>
-            {busy ? 'Working…' : !checked ? 'Check name' : form.when === 'NOW' ? 'Send' : form.when === 'LATER' ? 'Schedule payment' : 'Set up standing order'}
+            {busy ? 'Working…' : nameCheck && !checked ? 'Check name' : form.when === 'NOW' ? 'Send' : form.when === 'LATER' ? 'Schedule payment' : 'Set up standing order'}
           </button>
           {checked && <button type="button" className="btn small" onClick={() => setCop(null)}>Check again</button>}
         </div>
