@@ -31,7 +31,7 @@ public interface EssenceGateway {
     /** Same-bank transfer. Returns the posting reference. */
     String transfer(TransferInstruction instruction, String scenario);
 
-    /** Outbound UK payment on the scheme the bank chose (FPS or CHAPS); status arrives by webhook. */
+    /** Outbound payment on the scheme the bank chose (FPS or CHAPS in the UK); status arrives by webhook. */
     PaymentSubmission submitPayment(PaymentInstruction instruction, String scenario);
 
     /** Confirmation of Payee: does the name match the account holder at that sort code and account? */
@@ -81,9 +81,13 @@ public interface EssenceGateway {
                                String amount, String currency, String reference, String idempotencyKey) {
     }
 
-    /** scheme: FPS or CHAPS, chosen by the orchestrator. */
+    /**
+     * scheme: chosen by the orchestrator from the market's schemes (FPS or CHAPS in the UK). The payee is the sort
+     * code and account number in the UK, or creditorAccount ({scheme, fields}) in other markets.
+     */
     record PaymentInstruction(String debitAccount, String creditorName, String creditorSortCode,
                               String creditorAccountNumber, String amount, String currency, String reference,
-                              String endToEndId, String idempotencyKey, String scheme) {
+                              String endToEndId, String idempotencyKey, String scheme,
+                              java.util.Map<String, Object> creditorAccount) {
     }
 }

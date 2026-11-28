@@ -3,4 +3,6 @@
 dependencies {
     // Tests check routing, limits and fees with the real UK pack (the app gets the pack from the root build).
     testImplementation project(':markets:uk')
+    // A second market, to show the workflow follows the pack: no name check, wires that keep hours.
+    testImplementation project(':markets:us')
 }

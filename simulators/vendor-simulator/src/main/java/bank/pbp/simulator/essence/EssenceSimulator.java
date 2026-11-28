@@ -48,6 +48,7 @@ public class EssenceSimulator {
     /** The market's currency and local time (docs/design/market-packs.md); GBP and London in the UK. */
     private final String currency;
     private final java.time.ZoneId zone;
+    private final bank.pbp.common.market.MarketPack market;
 
     public EssenceSimulator(WebhookSender webhooks, @Value("${sim.essence.webhook-url}") String webhookUrl,
                             @Value("${sim.state-file:}") String stateFile,
@@ -55,6 +56,7 @@ public class EssenceSimulator {
                             bank.pbp.common.market.MarketPack market) {
         this.currency = market.currency().getCurrencyCode();
         this.zone = market.zone();
+        this.market = market;
         this.webhooks = webhooks;
         this.webhookUrl = webhookUrl;
         reset();
@@ -273,7 +275,7 @@ public class EssenceSimulator {
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
-    // ---------- outbound UK payments (Finastra routes to FPS, CHAPS or Bacs) ----------
+    // ---------- outbound payments (in the UK Finastra routes to FPS, CHAPS or Bacs) ----------
 
     /**
      * Accepts the payment, debits the account, and reports scheme status by webhook:
@@ -302,9 +304,12 @@ public class EssenceSimulator {
         post(debit.id, amount.negate(), String.valueOf(req.get("endToEndId")), "PAYMENT_OUT");
         String finastraRef = "FIN-" + shortId();
         String creditorSortCode = String.valueOf(req.get("creditorSortCode"));
+        // UK payees are a sort code and account number; other markets send creditorAccount ({scheme, fields}).
+        // A UK sort code starting 99, or the scenario scheme-reject in any market, is rejected by the scheme.
         boolean reject = "scheme-reject".equals(scenario) || creditorSortCode.startsWith("99");
-        // The bank chooses the scheme (FPS or CHAPS); the simulator only checks it is one Finastra routes.
-        String scheme = "CHAPS".equals(req.get("scheme")) ? "CHAPS" : "FPS";
+        // The bank chooses the scheme; the simulator only checks it is one of the market's (FPS or CHAPS in the UK)
+        // and otherwise reports the market's default instant scheme, as Finastra would route it.
+        String scheme = outboundScheme(req.get("scheme"));
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("finastraRef", finastraRef);
@@ -325,6 +330,16 @@ public class EssenceSimulator {
             webhooks.send(webhookUrl, statusEvent(finastraRef, endToEndId, scheme, "COMPLETED", null), 3000);
         }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(body);
+    }
+
+    /** The requested scheme if the market has it (not same-bank); otherwise the market's default (FPS in the UK). */
+    String outboundScheme(Object requested) {
+        String code = requested == null ? null : String.valueOf(requested);
+        return market.paymentScheme(code).filter(s -> !"INTERNAL".equals(s.code()))
+                .map(bank.pbp.common.market.PaymentScheme::code)
+                .orElseGet(() -> market.customerChoices().stream().filter(bank.pbp.common.market.PaymentScheme::instant)
+                        .findFirst().or(() -> market.customerChoices().stream().findFirst())
+                        .map(bank.pbp.common.market.PaymentScheme::code).orElse("FPS"));
     }
 
     private static Map<String, Object> statusEvent(String ref, String endToEndId, String scheme, String status,

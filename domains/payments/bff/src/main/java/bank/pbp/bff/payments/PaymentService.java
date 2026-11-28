@@ -63,10 +63,14 @@ public class PaymentService {
      * gives the same command (PaymentRequestShapesTest).
      */
     static Map<String, Object> creditorData(PaymentRequest.Creditor creditor) {
-        return Map.of(
-                "name", creditor.name(),
-                "sortCode", creditor.effectiveSortCode(),
-                "accountNumber", creditor.effectiveAccountNumber(),
-                "account", creditor.identifier().toJson());
+        // The sort code and number exist only for UK accounts; other markets' commands carry the account alone.
+        Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("name", creditor.name());
+        if (creditor.effectiveSortCode() != null && creditor.effectiveAccountNumber() != null) {
+            data.put("sortCode", creditor.effectiveSortCode());
+            data.put("accountNumber", creditor.effectiveAccountNumber());
+        }
+        data.put("account", creditor.identifier().toJson());
+        return data;
     }
 }

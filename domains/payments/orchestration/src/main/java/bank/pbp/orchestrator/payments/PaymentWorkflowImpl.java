@@ -1,5 +1,6 @@
 package bank.pbp.orchestrator.payments;
 
+import bank.pbp.common.market.ActiveMarket;
 import io.temporal.activity.ActivityOptions;
 import io.temporal.common.RetryOptions;
 import io.temporal.failure.ActivityFailure;
@@ -17,9 +18,10 @@ import java.util.List;
  *
  * <ul>
  *   <li>Checks: limits for the scheme, then Confirmation of Payee. NO_MATCH is rejected; CLOSE_MATCH
- *       goes ahead only when the customer confirmed the payee; UNAVAILABLE goes ahead (bank policy).</li>
+ *       goes ahead only when the customer confirmed the payee; UNAVAILABLE goes ahead (bank policy). A market
+ *       without a payee name check skips this step.</li>
  *   <li>HELD: high-value payments wait for a staff APPROVE or REJECT (72 hours, then rejected).</li>
- *   <li>QUEUED: CHAPS outside UK business hours waits for the next opening.</li>
+ *   <li>QUEUED: a scheme with opening hours (CHAPS in the UK) waits for the next opening outside them.</li>
  *   <li>Same-bank (INTERNAL) payments post directly in Essence. FPS and CHAPS go to Finastra,
  *       which reports back through the paymentStatus signal. The CHAPS fee is charged on completion.</li>
  * </ul>
@@ -48,6 +50,8 @@ public class PaymentWorkflowImpl implements PaymentWorkflow {
     static final Duration SCHEME_TIMEOUT = Duration.ofMinutes(2);
     /** How long a HELD payment waits for staff before it is rejected. */
     static final Duration REVIEW_TIMEOUT = Duration.ofHours(72);
+    /** Temporal change ID for opening hours on any scheme (market packs, Stage 2); see otherBank. */
+    static final String SCHEME_WINDOW_CHANGE = "scheme-window-any-market";
 
     private String status = "NEW";
     private final List<String[]> schemeUpdates = new ArrayList<>();
@@ -63,32 +67,15 @@ public class PaymentWorkflowImpl implements PaymentWorkflow {
             return moveTo(command, "REJECTED", risk.code() + ": " + risk.reason());
         }
 
-        PaymentActivities.CopCheck check;
-        try {
-            check = cop.confirmPayee(command);
-        } catch (ActivityFailure failure) {
-            check = new PaymentActivities.CopCheck("UNAVAILABLE", null, "PAY-COP-002");
-        }
-        if (check.result() == null) {
-            check = new PaymentActivities.CopCheck("UNAVAILABLE", null, "PAY-COP-002");
-        }
-        switch (check.result()) {
-            case "NO_MATCH" -> {
-                return moveTo(command, "REJECTED",
-                        "PAY-COP-001: the name does not match the account holder (" + check.reasonCode() + ")");
+        if (ActiveMarket.hasNameCheck()) {
+            String rejected = nameCheck(command);
+            if (rejected != null) {
+                return rejected;
             }
-            case "CLOSE_MATCH" -> {
-                if (!"CLOSE_MATCH".equals(command.copResult())) {
-                    return moveTo(command, "REJECTED", "PAY-COP-001: close match; the account is held by "
-                            + check.matchedName() + ". Confirm the payee to continue");
-                }
-            }
-            default -> {
-                // MATCH, or UNAVAILABLE: the payment goes ahead and the result is on record.
-            }
+        } else {
+            // No payee name check in this market (docs/design/market-packs.md, 4.3); constant per deployment.
+            moveTo(command, "CHECKS_PASSED", "No payee name check in this market");
         }
-        moveTo(command, "CHECKS_PASSED", "Confirmation of Payee: " + check.result()
-                + ("UNAVAILABLE".equals(check.result()) ? " (paid under bank policy)" : ""));
 
         if (risk.reviewRequired()) {
             moveTo(command, "HELD", "PAY-HOLD-001: high-value payment needs staff approval");
@@ -118,13 +105,53 @@ public class PaymentWorkflowImpl implements PaymentWorkflow {
         }
     }
 
-    private String otherBank(PaymentCommand command, String fee, String approval) {
-        if ("CHAPS".equals(command.paymentType())) {
-            PaymentActivities.Window window = activities.chapsWindow();
-            if (!window.open()) {
-                moveTo(command, "QUEUED", "CHAPS is closed; the payment will be sent when it opens at " + window.opensAt());
-                Workflow.sleep(Duration.ofMillis(window.waitMillis()));
+    /** Confirmation of Payee: the outcome when the payment stops here, or null when it goes ahead. */
+    private String nameCheck(PaymentCommand command) {
+        PaymentActivities.CopCheck check;
+        try {
+            check = cop.confirmPayee(command);
+        } catch (ActivityFailure failure) {
+            check = new PaymentActivities.CopCheck("UNAVAILABLE", null, "PAY-COP-002");
+        }
+        if (check.result() == null) {
+            check = new PaymentActivities.CopCheck("UNAVAILABLE", null, "PAY-COP-002");
+        }
+        switch (check.result()) {
+            case "NO_MATCH" -> {
+                return moveTo(command, "REJECTED",
+                        "PAY-COP-001: the name does not match the account holder (" + check.reasonCode() + ")");
             }
+            case "CLOSE_MATCH" -> {
+                if (!"CLOSE_MATCH".equals(command.copResult())) {
+                    return moveTo(command, "REJECTED", "PAY-COP-001: close match; the account is held by "
+                            + check.matchedName() + ". Confirm the payee to continue");
+                }
+            }
+            default -> {
+                // MATCH, or UNAVAILABLE: the payment goes ahead and the result is on record.
+            }
+        }
+        moveTo(command, "CHECKS_PASSED", "Confirmation of Payee: " + check.result()
+                + ("UNAVAILABLE".equals(check.result()) ? " (paid under bank policy)" : ""));
+        return null;
+    }
+
+    private String otherBank(PaymentCommand command, String fee, String approval) {
+        // Version 1 asks the market which schemes keep hours and reads any scheme's window; payments started before
+        // it replay on the original CHAPS-only path, so a CHAPS payment already queued carries on unchanged.
+        PaymentActivities.Window window = null;
+        int version = Workflow.getVersion(SCHEME_WINDOW_CHANGE, Workflow.DEFAULT_VERSION, 1);
+        if (version == Workflow.DEFAULT_VERSION) {
+            if ("CHAPS".equals(command.paymentType())) {
+                window = activities.chapsWindow();
+            }
+        } else if (ActiveMarket.hasHours(command.paymentType())) {
+            window = activities.schemeWindow(command.paymentType());
+        }
+        if (window != null && !window.open()) {
+            moveTo(command, "QUEUED", ActiveMarket.schemeName(command.paymentType())
+                    + " is closed; the payment will be sent when it opens at " + window.opensAt());
+            Workflow.sleep(Duration.ofMillis(window.waitMillis()));
         }
         String finastraRef;
         try {
@@ -150,10 +177,11 @@ public class PaymentWorkflowImpl implements PaymentWorkflow {
                     }
                 }
                 case "COMPLETED" -> {
-                    String note = "Settled by " + ("CHAPS".equals(command.paymentType()) ? "CHAPS" : "the scheme");
+                    String note = "Settled by " + (ActiveMarket.isInstant(command.paymentType()) ? "the scheme"
+                            : ActiveMarket.schemeName(command.paymentType()));
                     if (fee != null && new BigDecimal(fee).signum() > 0) {
                         activities.chargeFee(command, fee);
-                        note += "; fee £" + fee + " charged";
+                        note += "; fee " + ActiveMarket.currencySymbol() + fee + " charged";
                     }
                     return moveTo(command, "COMPLETED", note);
                 }

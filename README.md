@@ -232,11 +232,27 @@ Steps 7 and 8 (full smoke tests, then dropping the old columns) are still to com
 | UAE (`markets/ae`) | Pack built and unit-tested: AED, UAE time, Saturday–Sunday weekend, IBAN with the mod-97 check, Aani up to the bank's limit (at most the platform's AED 50,000) and UAEFTS above it or by choice, within the bank's hours. Hijri-calendar holidays are expected dates until the moon sighting; no payee name check until the Aani name lookup is added. **Not yet runnable end to end** |
 | Colombia (`markets/co`) | Pack built and unit-tested: COP, Colombia time, Spanish locale, Ley Emiliani holidays, Bre-B within the bank's limit (at most Bre-B's 1,000 UVB maximum), ACH otherwise, and the Banco de la República's CUD by choice within the bank's hours. Account formats are provisional; Bre-B keys and the masked-name check come with the Bre-B lookup. **Not yet runnable end to end** |
 
-To run a US bank end to end, still to build: the payment workflow skipping the name check where the market has
-none, and queueing wires outside their hours (a general scheme-window activity behind a Temporal version marker);
-the Essence adapter and simulators accepting RTP, FedNow, ACH and wire; the bank's own routing number in place of
-`pbp.bank.sort-code`; and US onboarding fields. Limits, the wire fee and cut-off, and which banks each instant network
-reaches are placeholders in `pbp.market.us.*`, to confirm with the client bank.
+**Platform support for other markets (built, not yet run end to end):**
+
+- **Name check:** the payment workflow skips it where the market has none.
+- **Opening hours:** a payment on any scheme with opening hours waits for the next opening (CHAPS in the UK; wires,
+  RTGS, UAEFTS and CUD elsewhere). This sits behind the Temporal version marker `scheme-window-any-market`, so
+  payments started on the old code replay on the CHAPS-only path.
+- **Core payments:** the Essence adapter and the vendor simulator take the market's schemes and its account
+  identifier (`creditor.account {scheme, fields}`), checked by the pack.
+- **The bank's own code:** set it with `PBP_BANK_CODE` (property `pbp.bank.code`). Without it, `BANK_SORT_CODE` is
+  used, as today.
+- **Payment notes:** workflow notes use the scheme's name and the market's currency symbol.
+
+**Still UK-only, so not yet runnable end to end for other markets:**
+
+- same-bank transfers (the simulator's accounts have UK sort codes);
+- saved payees and the name check;
+- inbound credits and Direct Debits in the simulator;
+- onboarding fields;
+- a CI test bank per market.
+
+The placeholders in `pbp.market.<code>.*` are still to confirm with each client bank.
 
 ## Observability (LLD section 15)
 
