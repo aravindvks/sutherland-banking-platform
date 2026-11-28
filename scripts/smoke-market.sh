@@ -49,7 +49,8 @@ fx_priya
 
 step "The BFF describes the $MARKET market"
 m=$(curl -sf "$BFF/v1/market" -H "$PRIYA_H")
-[ "$(echo "$m" | field code)" = "$MARKET" ] && [ "$(echo "$m" | field currency)" = "$CUR" ] \
+# Scheme codes are also "code" fields (upper case), so look for the market's own entries rather than the first one.
+echo "$m" | grep -q "\"code\":\"$MARKET\"" && echo "$m" | grep -q "\"currency\":\"$CUR\"" \
   && pass "GET /v1/market: $MARKET, $CUR" || fail "Expected $MARKET and $CUR, got $m"
 echo "$m" | grep -q '"nameCheck"' && fail "The $MARKET pack has no name check, but /v1/market lists one" \
   || pass "No payee name check in this market"
