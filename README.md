@@ -228,7 +228,8 @@ Steps 7 and 8 (full smoke tests, then dropping the old columns) are still to com
 | Market | Status |
 | --- | --- |
 | US (`markets/us`) | Pack built and unit-tested: ABA routing numbers with the check digit, RTP, FedNow, ACH and wires, USD, US Eastern time, Federal Reserve holidays. **Not yet runnable end to end** (see below) |
-| Jamaica, UAE, Colombia | Designed, not built |
+| Jamaica (`markets/jm`) | Pack built and unit-tested: JMD, Jamaica time, ACH below the J$1 million threshold and JamClear-RTGS at or above it (or by choice, within the bank's RTGS hours). Account field formats (bank, branch, account number) and the holiday list are provisional until confirmed with the client bank and the ACH operator's rules. One pack for Jamaica alone: MCB's other jurisdictions are still undecided (one pack with country settings, or a pack each). **Not yet runnable end to end** |
+| UAE, Colombia | Designed, not built |
 
 To run a US bank end to end, still to build: the payment workflow skipping the name check where the market has
 none, and queueing wires outside their hours (a general scheme-window activity behind a Temporal version marker);

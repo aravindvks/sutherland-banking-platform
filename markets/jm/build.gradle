@@ -1,0 +1,3 @@
+// The Jamaica market pack (docs/design/market-packs.md): JMD, Jamaica time, JamClear-RTGS for J$1 million and
+// above, ACH below it. Upcoming: built and unit-tested, not yet run end to end on the simulators. Account field
+// formats and the holiday list are provisional until confirmed with the client bank and the ACH operator's rules.
