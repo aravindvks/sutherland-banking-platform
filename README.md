@@ -227,10 +227,10 @@ Steps 7 and 8 (full smoke tests, then dropping the old columns) are still to com
 
 | Market | Status |
 | --- | --- |
-| US (`markets/us`) | Pack built and unit-tested: ABA routing numbers with the check digit, RTP, FedNow, ACH and wires, USD, US Eastern time, Federal Reserve holidays. **Not yet runnable end to end** (see below) |
-| Jamaica (`markets/jm`) | Pack built and unit-tested: JMD, Jamaica time, ACH below the J$1 million threshold and JamClear-RTGS at or above it (or by choice, within the bank's RTGS hours). Account field formats (bank, branch, account number) and the holiday list are provisional until confirmed with the client bank and the ACH operator's rules. One pack for Jamaica alone: MCB's other jurisdictions are still undecided (one pack with country settings, or a pack each). **Not yet runnable end to end** |
-| UAE (`markets/ae`) | Pack built and unit-tested: AED, UAE time, Saturday–Sunday weekend, IBAN with the mod-97 check, Aani up to the bank's limit (at most the platform's AED 50,000) and UAEFTS above it or by choice, within the bank's hours. Hijri-calendar holidays are expected dates until the moon sighting; no payee name check until the Aani name lookup is added. **Not yet runnable end to end** |
-| Colombia (`markets/co`) | Pack built and unit-tested: COP, Colombia time, Spanish locale, Ley Emiliani holidays, Bre-B within the bank's limit (at most Bre-B's 1,000 UVB maximum), ACH otherwise, and the Banco de la República's CUD by choice within the bank's hours. Account formats are provisional; Bre-B keys and the masked-name check come with the Bre-B lookup. **Not yet runnable end to end** |
+| US (`markets/us`) | Pack built and unit-tested: ABA routing numbers with the check digit, RTP, FedNow, ACH and wires, USD, US Eastern time, Federal Reserve holidays. **Payments to other banks pass end to end on the simulators (CI `e2e-market`); the market as a whole is still upcoming** (see below) |
+| Jamaica (`markets/jm`) | Pack built and unit-tested: JMD, Jamaica time, ACH below the J$1 million threshold and JamClear-RTGS at or above it (or by choice, within the bank's RTGS hours). Account field formats (bank, branch, account number) and the holiday list are provisional until confirmed with the client bank and the ACH operator's rules. One pack for Jamaica alone: MCB's other jurisdictions are still undecided (one pack with country settings, or a pack each). **Payments to other banks pass end to end on the simulators (CI `e2e-market`); the market as a whole is still upcoming** |
+| UAE (`markets/ae`) | Pack built and unit-tested: AED, UAE time, Saturday–Sunday weekend, IBAN with the mod-97 check, Aani up to the bank's limit (at most the platform's AED 50,000) and UAEFTS above it or by choice, within the bank's hours. Hijri-calendar holidays are expected dates until the moon sighting; no payee name check until the Aani name lookup is added. **Payments to other banks pass end to end on the simulators (CI `e2e-market`); the market as a whole is still upcoming** |
+| Colombia (`markets/co`) | Pack built and unit-tested: COP, Colombia time, Spanish locale, Ley Emiliani holidays, Bre-B within the bank's limit (at most Bre-B's 1,000 UVB maximum), ACH otherwise, and the Banco de la República's CUD by choice within the bank's hours. Account formats are provisional; Bre-B keys and the masked-name check come with the Bre-B lookup. **Payments to other banks pass end to end on the simulators (CI `e2e-market`); the market as a whole is still upcoming** |
 
 **Platform support for other markets (built, not yet run end to end):**
 
@@ -244,13 +244,28 @@ Steps 7 and 8 (full smoke tests, then dropping the old columns) are still to com
   used, as today.
 - **Payment notes:** workflow notes use the scheme's name and the market's currency symbol.
 
-**Still UK-only, so not yet runnable end to end for other markets:**
+**Still UK-only (other markets refuse these clearly or do not offer them yet):**
 
 - same-bank transfers (the simulator's accounts have UK sort codes);
 - saved payees and the name check;
 - inbound credits and Direct Debits in the simulator;
-- onboarding fields;
-- a CI test bank per market.
+- onboarding fields.
+
+**CI test bank per market:** the `e2e-market` job builds each of `us`, `jm`, `ae` and `co` with its own pack, with
+core modules only, and starts the stack on the simulators. `scripts/smoke-market.sh` then checks, through the BFF:
+
+- the BFF describes that market (code and currency) and lists no name check;
+- the market's account check refuses a bad account;
+- each of the market's schemes reaches a final status, with the name check skipped. A scheme with opening hours
+  may finish as QUEUED, depending on the time of the run.
+
+To run it locally:
+
+```bash
+PBP_MARKET=us ./gradlew bootJar
+PBP_MARKET=us PBP_BANK_CODE=026009593 docker compose -f infra/compose/docker-compose.yml --profile apps up -d --build
+PBP_MARKET=us scripts/smoke-market.sh
+```
 
 The placeholders in `pbp.market.<code>.*` are still to confirm with each client bank.
 

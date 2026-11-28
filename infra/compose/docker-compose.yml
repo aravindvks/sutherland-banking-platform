@@ -194,6 +194,7 @@ services:
       dockerfile: infra/compose/Dockerfile
       args: { MODULE: simulators/vendor-simulator, JAR: vendor-simulator.jar }
     environment:
+      PBP_MARKET: ${PBP_MARKET:-uk}
       SIM_ESSENCE_WEBHOOK_URL: http://essence-adapter:8084/hooks/finastra
       SIM_ATFINITY_WEBHOOK_URL: http://atfinity-adapter:8086/hooks/atfinity
       SIM_THREDD_EHI_URL: http://ehi-responder:8083/ehi/v1/messages
@@ -211,6 +212,10 @@ services:
       <<: *app-build
       args: { MODULE: services/mapping-service, JAR: mapping-service.jar }
     environment: &app-env
+      # The market this stack runs as (docs/design/market-packs.md); the jars must be built with the same
+      # -Pmarket / PBP_MARKET, or the services refuse to start. PBP_BANK_CODE is this bank's code in that market.
+      PBP_MARKET: ${PBP_MARKET:-uk}
+      PBP_BANK_CODE: ${PBP_BANK_CODE:-200001}
       DB_HOST: postgres
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "10"
       KAFKA_BOOTSTRAP: kafka:29092

@@ -233,3 +233,71 @@ jobs:
           done
           msg=$(sed -e 's/%/%25/g' summary.txt | cut -c1-400 | awk '{printf "%s%%0A", $0}')
           echo "::error title=End-to-end failed::${msg}"
+
+  # Market packs, Stage 2 (docs/design/market-packs.md): the same code built with another market's pack, started on
+  # the simulators, and that market's payments sent end to end by scripts/smoke-market.sh. Core modules only.
+  # A market whose bank passes here is "ready on simulators"; its placeholders still need the client bank's figures.
+  e2e-market:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - market: us
+            bank-code: "026009593"
+          - market: jm
+            bank-code: "77"
+          - market: ae
+            bank-code: "033"
+          - market: co
+            bank-code: "1001"
+    name: e2e-market (${{ matrix.market }})
+    env:
+      PBP_MARKET: ${{ matrix.market }}
+      PBP_BANK_CODE: ${{ matrix.bank-code }}
+      PBP_MODULES: onboarding,payments,compliance
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Start the stack with the ${{ matrix.market }} pack
+        run: |
+          ./gradlew bootJar --no-daemon
+          docker compose -f infra/compose/docker-compose.yml --profile apps up -d --build
+
+      - name: Wait for services
+        run: |
+          for port in 8090 8082 8084 8085 8086 8089 8083 8080 8081 8087; do
+            for i in $(seq 1 90); do
+              curl -sf "http://localhost:$port/actuator/health" >/dev/null && { echo "port $port up"; break; }
+              sleep 2
+            done
+            curl -sf "http://localhost:$port/actuator/health" >/dev/null || { echo "port $port did not start"; exit 1; }
+          done
+
+      - name: Wait for Keycloak
+        run: for i in $(seq 1 90); do curl -sf http://localhost:8180/realms/pbp >/dev/null && exit 0; sleep 2; done; exit 1
+
+      - name: Market smoke test
+        shell: bash
+        run: |
+          set -o pipefail
+          ./scripts/smoke-market.sh 2>&1 | tee smoke.log
+
+      - name: Report failures
+        if: failure()
+        run: |
+          docker compose -f infra/compose/docker-compose.yml --profile apps ps -a || true
+          docker compose -f infra/compose/docker-compose.yml --profile apps logs --no-color > stack.log 2>&1 || true
+          { grep -E 'FAIL' smoke.log 2>/dev/null || echo "Stopped before or during the smoke test"; } \
+            | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-900 | sed 's/^/::error title=Market smoke test::/' || true
+          grep -E "Exception|Caused by| ERROR " stack.log | grep -v WARN | sed 's/\x1b\[[0-9;]*m//g' | awk '!seen[$0]++' \
+            | head -10 | cut -c1-700 | sed 's/^/::error title=Service error::/' || true
+          for s in $(docker compose -f infra/compose/docker-compose.yml --profile apps ps -a --format '{{.Service}} {{.Status}}' 2>/dev/null | grep -viE ' Up .*healthy|Up [0-9]+ (seconds|minutes|hours)$' | awk '{print $1}'); do
+            echo "---- $s (last 60 lines) ----"; docker compose -f infra/compose/docker-compose.yml --profile apps logs --no-color --tail 60 "$s" 2>&1 || true
+          done

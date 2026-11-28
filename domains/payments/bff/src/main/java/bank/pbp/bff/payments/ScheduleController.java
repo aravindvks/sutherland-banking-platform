@@ -146,7 +146,7 @@ public class ScheduleController {
             @NotNull @Valid PaymentRequest.Creditor creditor,
             @NotNull @Valid PaymentRequest.Money amount,
             @Size(max = 18) String reference,
-            @Pattern(regexp = "FPS|CHAPS") String scheme,
+            @bank.pbp.common.market.MarketScheme String scheme,
             @Pattern(regexp = "MATCH|CLOSE_MATCH|NO_MATCH|UNAVAILABLE") String copResult) {
     }
 }
