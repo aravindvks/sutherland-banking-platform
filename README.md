@@ -229,7 +229,8 @@ Steps 7 and 8 (full smoke tests, then dropping the old columns) are still to com
 | --- | --- |
 | US (`markets/us`) | Pack built and unit-tested: ABA routing numbers with the check digit, RTP, FedNow, ACH and wires, USD, US Eastern time, Federal Reserve holidays. **Not yet runnable end to end** (see below) |
 | Jamaica (`markets/jm`) | Pack built and unit-tested: JMD, Jamaica time, ACH below the J$1 million threshold and JamClear-RTGS at or above it (or by choice, within the bank's RTGS hours). Account field formats (bank, branch, account number) and the holiday list are provisional until confirmed with the client bank and the ACH operator's rules. One pack for Jamaica alone: MCB's other jurisdictions are still undecided (one pack with country settings, or a pack each). **Not yet runnable end to end** |
-| UAE, Colombia | Designed, not built |
+| UAE (`markets/ae`) | Pack built and unit-tested: AED, UAE time, Saturday–Sunday weekend, IBAN with the mod-97 check, Aani up to the bank's limit (at most the platform's AED 50,000) and UAEFTS above it or by choice, within the bank's hours. Hijri-calendar holidays are expected dates until the moon sighting; no payee name check until the Aani name lookup is added. **Not yet runnable end to end** |
+| Colombia | Designed, not built |
 
 To run a US bank end to end, still to build: the payment workflow skipping the name check where the market has
 none, and queueing wires outside their hours (a general scheme-window activity behind a Temporal version marker);

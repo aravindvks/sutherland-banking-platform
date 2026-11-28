@@ -18,8 +18,9 @@ export const accountFields = (m: Market = market()): AccountField[] => m.account
 export const exampleAccount = (m: Market = market()): Record<string, string> =>
   Object.fromEntries(accountFields(m).map((f) => [f.name, f.example ?? '']));
 
-/** What the customer typed, without the spaces and dashes people put in sort codes, routing numbers and IBANs. */
-export const clean = (value: string | undefined) => (value ?? '').replace(/[\s-]/g, '');
+/** What the customer typed, without the spaces and dashes people put in sort codes, routing numbers and IBANs,
+ *  and in capitals (IBANs start "AE"). */
+export const clean = (value: string | undefined) => (value ?? '').replace(/[\s-]/g, '').toUpperCase();
 
 /** The field's hint ("must be 6 digits") when the value does not match, otherwise null. */
 export const fieldProblem = (field: AccountField, value: string | undefined): string | null => {

@@ -1,0 +1,3 @@
+// The UAE market pack (docs/design/market-packs.md): IBANs, Aani instant payments, UAEFTS, AED, UAE time. Upcoming:
+// built and unit-tested, not yet run end to end on the simulators. Holidays that follow the Hijri calendar are
+// expected dates until the moon sighting confirms them.

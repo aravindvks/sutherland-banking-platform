@@ -106,3 +106,13 @@ describe('choices and labels', () => {
     expect(choiceLabel(ach, 'ACH transfer', pounds)).toBe('ACH transfer · free');
   });
 });
+
+describe('IBAN input', () => {
+  it('accepts an IBAN typed in groups and in lower case', () => {
+    const iban = { ...other, accountIdentifier: { scheme: 'IBAN', fields: [
+      { name: 'iban', label: 'IBAN', pattern: 'AE\\d{21}', hint: 'must be AE followed by 21 digits' }] } };
+    expect(accountProblems({ iban: 'ae07 0331 2345 6789 0123 456' }, iban)).toEqual([]);
+    expect(creditorBody('Sara', { iban: 'ae07 0331 2345 6789 0123 456' }, iban))
+      .toEqual({ name: 'Sara', account: { scheme: 'IBAN', fields: { iban: 'AE070331234567890123456' } } });
+  });
+});
