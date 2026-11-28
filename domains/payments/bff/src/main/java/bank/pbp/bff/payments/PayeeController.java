@@ -108,6 +108,12 @@ public class PayeeController {
     }
 
     private JsonNode check(PayeeDetails body) {
+        if (body.effectiveSortCode() == null || body.effectiveAccountNumber() == null) {
+            // Saved payees and the name check are UK-shaped (sort code and account number) until other markets'
+            // payee storage and name checks are built (docs/design/market-packs.md, 4.3).
+            throw new bank.pbp.common.error.PbpException("GEN-VALID-001", 422, "Not supported",
+                    "Payees and the name check are not built for this market yet");
+        }
         Map<String, Object> req = Map.of("name", body.name(), "sortCode", body.effectiveSortCode(),
                 "accountNumber", body.effectiveAccountNumber());
         return VendorErrors.call("essence", "payees.confirm", () -> essence.post().uri("/v1/payees/confirm")

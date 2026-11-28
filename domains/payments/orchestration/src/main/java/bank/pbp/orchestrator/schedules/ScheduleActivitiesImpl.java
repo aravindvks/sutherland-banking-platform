@@ -38,12 +38,23 @@ public class ScheduleActivitiesImpl implements ScheduleWorkflow.ScheduleActiviti
     private final MarketPack market;
 
     public ScheduleActivitiesImpl(JdbcClient jdbc, EventPublisher events, ObjectMapper mapper,
-                                  @Value("${pbp.bank.sort-code}") String bankSortCode, MarketPack market) {
+                                  @Value("${pbp.bank.code:${pbp.bank.sort-code}}") String bankSortCode, MarketPack market) {
         this.jdbc = jdbc;
         this.events = events;
         this.mapper = mapper;
         this.bankSortCode = bankSortCode;
         this.market = market;
+    }
+
+    /** Name, sort code and account number in the UK, as before; other markets' accounts are in creditor_account. */
+    static Map<String, Object> creditorColumn(ScheduleRequest r) {
+        Map<String, Object> creditor = new LinkedHashMap<>();
+        creditor.put("name", r.creditorName());
+        if (r.creditorSortCode() != null && r.creditorAccountNumber() != null) {
+            creditor.put("sortCode", r.creditorSortCode());
+            creditor.put("accountNumber", r.creditorAccountNumber());
+        }
+        return creditor;
     }
 
     @Override
@@ -63,8 +74,7 @@ public class ScheduleActivitiesImpl implements ScheduleWorkflow.ScheduleActiviti
                     .param("kind", r.kind())
                     .param("frequency", r.frequency())
                     .param("debit", r.debtorAccount())
-                    .param("creditor", json(Map.of("name", r.creditorName(), "sortCode", r.creditorSortCode(),
-                            "accountNumber", r.creditorAccountNumber())))
+                    .param("creditor", json(creditorColumn(r)))
                     .param("amount", new BigDecimal(r.amount()))
                     .param("currency", r.currency())
                     .param("reference", r.reference())

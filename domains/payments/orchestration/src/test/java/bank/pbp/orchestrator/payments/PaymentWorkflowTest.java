@@ -120,6 +120,10 @@ class PaymentWorkflowTest {
         assertThat(fake.transitions).containsExactly("INITIATED->CHECKS_PASSED", "CHECKS_PASSED->QUEUED",
                 "QUEUED->SUBMITTED", "SUBMITTED->ACCEPTED", "ACCEPTED->COMPLETED");
         assertThat(fake.feesCharged).containsExactly("20.00");
+        // New payments read the window through the market-wide activity; the text is as before.
+        assertThat(fake.windowsAsked).containsExactly("CHAPS");
+        assertThat(fake.reasons).contains("CHAPS is closed; the payment will be sent when it opens at 2026-11-09T06:00Z",
+                "Settled by CHAPS; fee £20.00 charged");
     }
 
     @Test
@@ -195,6 +199,7 @@ class PaymentWorkflowTest {
         volatile boolean copFails;
         volatile boolean chapsOpen = true;
         volatile CopCheck cop = new CopCheck("MATCH", null, null);
+        final java.util.concurrent.atomic.AtomicInteger copCalls = new java.util.concurrent.atomic.AtomicInteger();
 
         @Override
         public void createPayment(PaymentCommand command) {
@@ -212,6 +217,7 @@ class PaymentWorkflowTest {
 
         @Override
         public CopCheck confirmPayee(PaymentCommand command) {
+            copCalls.incrementAndGet();
             if (copFails) {
                 throw ApplicationFailure.newFailure("CoP down", "PAY-COP-002");
             }
@@ -221,6 +227,14 @@ class PaymentWorkflowTest {
         @Override
         public Window chapsWindow() {
             return chapsOpen ? new Window(true, "now", 0) : new Window(false, "2026-11-09T06:00Z", 3_600_000);
+        }
+
+        final List<String> windowsAsked = Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public Window schemeWindow(String schemeCode) {
+            windowsAsked.add(schemeCode);
+            return chapsWindow();
         }
 
         @Override

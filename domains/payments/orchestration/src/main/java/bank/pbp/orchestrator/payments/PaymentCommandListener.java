@@ -44,7 +44,7 @@ public class PaymentCommandListener {
 
     public PaymentCommandListener(WorkflowClient temporal, EventPublisher events, ScheduleCommands schedules,
                                   DirectDebitCommands directDebits,
-                                  @Value("${pbp.bank.sort-code}") String bankSortCode, MarketPack market) {
+                                  @Value("${pbp.bank.code:${pbp.bank.sort-code}}") String bankSortCode, MarketPack market) {
         this.temporal = temporal;
         this.events = events;
         this.schedules = schedules;
@@ -86,7 +86,7 @@ public class PaymentCommandListener {
      * In the UK: this bank's sort code → INTERNAL; otherwise CHAPS when the customer chose it, else Faster
      * Payments.
      *
-     * @param ownBank this bank's code in the market's identifier scheme (pbp.bank.sort-code in the UK)
+     * @param ownBank this bank's code in the market's identifier scheme: pbp.bank.code, or pbp.bank.sort-code in the UK
      * @param amount  decimal string; an unreadable amount routes as if absent and is rejected by the risk check
      */
     public static String paymentType(MarketPack market, String ownBank, AccountIdentifier creditor,

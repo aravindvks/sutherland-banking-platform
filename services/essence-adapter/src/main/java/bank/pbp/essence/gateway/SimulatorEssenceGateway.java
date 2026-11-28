@@ -111,6 +111,9 @@ public class SimulatorEssenceGateway implements EssenceGateway {
         body.put("endToEndId", p.endToEndId());
         body.put("clientRequestId", p.idempotencyKey());
         body.put("scheme", p.scheme() == null ? "FPS" : p.scheme());
+        if (p.creditorAccount() != null) {
+            body.put("creditorAccount", p.creditorAccount());
+        }
         Map<String, Object> r = post(standard, "payments.submit", "/payments", body, scenario);
         return new PaymentSubmission(str(r.get("finastraRef")), str(r.get("status")), str(r.get("scheme")));
     }

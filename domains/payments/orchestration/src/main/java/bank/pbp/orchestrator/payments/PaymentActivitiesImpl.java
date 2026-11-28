@@ -76,8 +76,9 @@ public class PaymentActivitiesImpl implements PaymentActivities {
     @Override
     public void createPayment(PaymentCommand c) {
         withCorrelation(c, () -> tx.execute(status -> {
-            Map<String, String> creditor = Map.of("name", c.creditorName(), "sortCode", c.creditorSortCode(),
-                    "accountNumber", c.creditorAccountNumber());
+            // Name, sort code and account number in the UK; other markets' accounts are in creditor_account.
+            Map<String, Object> creditor = creditorBody(c);
+            creditor.remove("account");
             int inserted = jdbc.sql("""
                             INSERT INTO payment (payment_id, correlation_id, customer_id, debit_account, creditor,
                                                  amount, currency, payment_type, status, idempotency_key, created_at,
@@ -184,6 +185,19 @@ public class PaymentActivitiesImpl implements PaymentActivities {
     }
 
     @Override
+    public Window schemeWindow(String schemeCode) {
+        Instant now = Instant.now();
+        PaymentScheme scheme = market.paymentScheme(schemeCode).orElse(null);
+        if (scheme == null || scheme.window().always()) {
+            return new Window(true, now.atZone(market.zone()).toOffsetDateTime().toString(), 0);
+        }
+        Instant opens = scheme.window().nextOpening(now, market.zone(), market.calendar());
+        return new Window(scheme.window().isOpen(now, market.zone(), market.calendar()),
+                opens.atZone(market.zone()).toOffsetDateTime().toString(),
+                Math.max(0, opens.toEpochMilli() - now.toEpochMilli()));
+    }
+
+    @Override
     public String chargeFee(PaymentCommand c, String fee) {
         return withCorrelation(c, () -> {
             Map<String, Object> body = new LinkedHashMap<>();
@@ -254,8 +268,7 @@ public class PaymentActivitiesImpl implements PaymentActivities {
         return withCorrelation(c, () -> {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("debitAccount", c.debtorAccount());
-            body.put("creditor", Map.of("name", c.creditorName(), "sortCode", c.creditorSortCode(),
-                    "accountNumber", c.creditorAccountNumber()));
+            body.put("creditor", creditorBody(c));
             body.put("amount", Map.of("value", c.amount(), "currency", c.currency()));
             body.put("reference", c.remittanceInfo());
             body.put("idempotencyKey", c.paymentId());
@@ -285,14 +298,14 @@ public class PaymentActivitiesImpl implements PaymentActivities {
         return withCorrelation(c, () -> {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("debitAccount", c.debtorAccount());
-            body.put("creditor", Map.of("name", c.creditorName(), "sortCode", c.creditorSortCode(),
-                    "accountNumber", c.creditorAccountNumber()));
+            body.put("creditor", creditorBody(c));
             body.put("amount", Map.of("value", c.amount(), "currency", c.currency()));
             body.put("reference", c.remittanceInfo());
             // Our payment ID travels as the end-to-end ID, so Finastra's status reports name the payment.
             body.put("endToEndId", c.paymentId());
             body.put("idempotencyKey", c.paymentId());
-            body.put("scheme", "CHAPS".equals(c.paymentType()) ? "CHAPS" : "FPS");
+            // The scheme the router chose (FPS or CHAPS in the UK; RTP, ACH, AANI, BREB and so on elsewhere).
+            body.put("scheme", c.paymentType());
             Map<String, Object> result;
             try {
                 result = essence.post().uri("/v1/payments").body(body).retrieve().body(MAP);
@@ -351,6 +364,22 @@ public class PaymentActivitiesImpl implements PaymentActivities {
     }
 
     /** Activities run on Temporal threads, so the correlation ID is restored explicitly for logs and calls. */
+    /**
+     * The payee for the Essence adapter: in the UK the name, sort code and account number, exactly as before; in other
+     * markets the name and the market's account identifier ({scheme, fields}).
+     */
+    static Map<String, Object> creditorBody(PaymentCommand c) {
+        Map<String, Object> creditor = new LinkedHashMap<>();
+        creditor.put("name", c.creditorName());
+        if (c.creditorSortCode() != null && c.creditorAccountNumber() != null) {
+            creditor.put("sortCode", c.creditorSortCode());
+            creditor.put("accountNumber", c.creditorAccountNumber());
+        } else if (c.account() != null) {
+            creditor.put("account", c.account().toJson());
+        }
+        return creditor;
+    }
+
     private static <T> T withCorrelation(PaymentCommand c, Supplier<T> work) {
         Correlation.set(c.correlationId());
         try {

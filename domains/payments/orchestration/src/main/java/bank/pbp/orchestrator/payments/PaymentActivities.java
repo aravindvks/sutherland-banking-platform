@@ -20,8 +20,14 @@ public interface PaymentActivities {
      */
     CopCheck confirmPayee(PaymentCommand command);
 
-    /** Whether CHAPS is open now and, if not, how long until it opens (UK business hours). */
+    /**
+     * Whether CHAPS is open now and, if not, how long until it opens (UK business hours). Kept for payments started
+     * before {@link #schemeWindow}, which replay through it.
+     */
     Window chapsWindow();
+
+    /** Whether the market's scheme with this code is open now and, if not, how long until it opens. */
+    Window schemeWindow(String schemeCode);
 
     /**
      * Moves the payment from one status to the next, writes history and publishes the payment

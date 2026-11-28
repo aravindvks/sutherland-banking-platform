@@ -1,10 +1,14 @@
 package bank.pbp.essence;
 
+import bank.pbp.common.error.PbpException;
+import bank.pbp.common.market.AccountIdentifier;
+import bank.pbp.common.market.MarketPack;
 import bank.pbp.essence.gateway.EssenceGateway;
 import bank.pbp.essence.gateway.EssenceGateway.Lane;
 import bank.pbp.essence.gateway.EssenceGateway.PaymentInstruction;
 import bank.pbp.essence.gateway.EssenceGateway.TransferInstruction;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -32,9 +36,11 @@ public class EssenceController {
     private static final String SCENARIO = "X-Sim-Scenario";
 
     private final EssenceGateway essence;
+    private final MarketPack market;
 
-    public EssenceController(EssenceGateway essence) {
+    public EssenceController(EssenceGateway essence, MarketPack market) {
         this.essence = essence;
+        this.market = market;
     }
 
     @PostMapping("/parties")
@@ -89,6 +95,10 @@ public class EssenceController {
     @PostMapping("/transfers")
     public Map<String, String> transfer(@Valid @RequestBody TransferRequest req,
                                         @RequestHeader(value = SCENARIO, required = false) String scenario) {
+        if (req.creditor().sortCode() == null || req.creditor().accountNumber() == null) {
+            throw new PbpException("GEN-VALID-001", 422, "Not supported",
+                    "Same-bank transfers need the sort code and account number; other markets' accounts are not built yet");
+        }
         String postingRef = timed("transfers.create", () -> essence.transfer(new TransferInstruction(
                 req.debitAccount(), req.creditor().sortCode(), req.creditor().accountNumber(), req.amount().value(),
                 req.amount().currency(), req.reference(), req.idempotencyKey()), scenario));
@@ -99,10 +109,35 @@ public class EssenceController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public EssenceGateway.PaymentSubmission submitPayment(@Valid @RequestBody PaymentRequest req,
                                                           @RequestHeader(value = SCENARIO, required = false) String scenario) {
+        String scheme = req.scheme() == null ? "FPS" : req.scheme();
+        // The orchestrator chose the scheme; it must be one of this market's schemes to another bank.
+        if ("INTERNAL".equals(scheme) || market.paymentScheme(scheme).isEmpty()) {
+            throw new PbpException("GEN-VALID-001", 400, "Invalid request",
+                    "scheme " + scheme + " is not a payment scheme in the '" + market.code() + "' market");
+        }
+        Map<String, Object> account = checkedAccount(req.creditor());
         return timed("payments.submit", () -> essence.submitPayment(new PaymentInstruction(req.debitAccount(),
                 req.creditor().name(), req.creditor().sortCode(), req.creditor().accountNumber(), req.amount().value(),
-                req.amount().currency(), req.reference(), req.endToEndId(), req.idempotencyKey(),
-                req.scheme() == null ? "FPS" : req.scheme()), scenario));
+                req.amount().currency(), req.reference(), req.endToEndId(), req.idempotencyKey(), scheme, account),
+                scenario));
+    }
+
+    /** A creditor given as the market's account identifier ({scheme, fields}), checked by the pack; null in the UK shape. */
+    private Map<String, Object> checkedAccount(Creditor creditor) {
+        if (creditor.account() == null) {
+            return null;
+        }
+        AccountIdentifier id = AccountIdentifier.fromJson(creditor.account());
+        if (id == null) {
+            throw new PbpException("GEN-VALID-001", 400, "Invalid request", "creditor.account needs a scheme and fields");
+        }
+        Map<String, String> problems = market.accountIdentifiers().problems(id);
+        if (!problems.isEmpty()) {
+            Map.Entry<String, String> first = problems.entrySet().iterator().next();
+            throw new PbpException("GEN-VALID-001", 400, "Invalid request",
+                    "creditor.account." + first.getKey() + " " + first.getValue());
+        }
+        return id.toJson();
     }
 
     /** Confirmation of Payee (LLD section 6: POST /v1/payees/confirm). */
@@ -170,9 +205,19 @@ public class EssenceController {
                         @NotBlank @bank.pbp.common.market.MarketCurrency String currency) {
     }
 
+    /**
+     * The payee: in the UK a sort code and account number (as before); in other markets the market's account
+     * identifier, {scheme, fields}, checked against the pack.
+     */
     public record Creditor(String name,
-                           @NotBlank @Pattern(regexp = "\\d{6}") String sortCode,
-                           @NotBlank @Pattern(regexp = "\\d{8}") String accountNumber) {
+                           @Pattern(regexp = "\\d{6}") String sortCode,
+                           @Pattern(regexp = "\\d{8}") String accountNumber,
+                           Map<String, Object> account) {
+
+        @AssertTrue(message = "needs a sortCode and accountNumber, or an account")
+        public boolean isIdentified() {
+            return (sortCode != null && accountNumber != null) || account != null;
+        }
     }
 
     public record NewParty(@NotBlank String name, @NotBlank @Pattern(regexp = "INDIVIDUAL|BUSINESS") String partyType) {
@@ -194,7 +239,7 @@ public class EssenceController {
     public record PaymentRequest(@NotBlank String debitAccount, @NotNull @Valid Creditor creditor,
                                  @NotNull @Valid Money amount, String reference, @NotBlank String endToEndId,
                                  @NotBlank String idempotencyKey,
-                                 @Pattern(regexp = "FPS|CHAPS") String scheme) {
+                                 @Pattern(regexp = "[A-Z_]{2,12}") String scheme) {
     }
 
     public record CopRequest(@NotBlank String name,
