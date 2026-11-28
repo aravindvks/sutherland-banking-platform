@@ -22,7 +22,7 @@ public record PaymentRequest(
         String purpose,
         @Size(max = 18) String remittanceInfo,
         @Pattern(regexp = "MATCH|CLOSE_MATCH|NO_MATCH|UNAVAILABLE") String copResult,
-        @Pattern(regexp = "FPS|CHAPS") String scheme) {
+        @bank.pbp.common.market.MarketScheme String scheme) {
 
     /**
      * The payee. The account comes either as {@code account} (the market's identifier) or as the original

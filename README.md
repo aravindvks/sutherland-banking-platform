@@ -244,13 +244,28 @@ Steps 7 and 8 (full smoke tests, then dropping the old columns) are still to com
   used, as today.
 - **Payment notes:** workflow notes use the scheme's name and the market's currency symbol.
 
-**Still UK-only, so not yet runnable end to end for other markets:**
+**Still UK-only (other markets refuse these clearly or do not offer them yet):**
 
 - same-bank transfers (the simulator's accounts have UK sort codes);
 - saved payees and the name check;
 - inbound credits and Direct Debits in the simulator;
-- onboarding fields;
-- a CI test bank per market.
+- onboarding fields.
+
+**CI test bank per market:** the `e2e-market` job builds each of `us`, `jm`, `ae` and `co` with its own pack, with
+core modules only, and starts the stack on the simulators. `scripts/smoke-market.sh` then checks, through the BFF:
+
+- the BFF describes that market (code and currency) and lists no name check;
+- the market's account check refuses a bad account;
+- each of the market's schemes reaches a final status, with the name check skipped. A scheme with opening hours
+  may finish as QUEUED, depending on the time of the run.
+
+To run it locally:
+
+```bash
+PBP_MARKET=us ./gradlew bootJar
+PBP_MARKET=us PBP_BANK_CODE=026009593 docker compose -f infra/compose/docker-compose.yml --profile apps up -d --build
+PBP_MARKET=us scripts/smoke-market.sh
+```
 
 The placeholders in `pbp.market.<code>.*` are still to confirm with each client bank.
 

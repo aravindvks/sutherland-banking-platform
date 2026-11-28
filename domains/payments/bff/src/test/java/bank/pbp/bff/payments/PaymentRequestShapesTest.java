@@ -45,6 +45,9 @@ class PaymentRequestShapesTest {
                     if (key == MarketCurrencyValidator.class) {
                         return (T) new MarketCurrencyValidator(UK);
                     }
+                    if (key == bank.pbp.common.market.MarketSchemeValidator.class) {
+                        return (T) new bank.pbp.common.market.MarketSchemeValidator(UK);
+                    }
                     return fallback.getInstance(key);
                 }
 
