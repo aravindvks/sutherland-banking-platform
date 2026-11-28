@@ -22,7 +22,7 @@ include 'libs:bff-core'
 
 // Market packs (docs/design/market-packs.md), one folder per country: markets/<code>. A build carries one, chosen
 // by -Pmarket or PBP_MARKET (root build.gradle).
-['uk', 'us', 'jm', 'ae'].each { m ->
+['uk', 'us', 'jm', 'ae', 'co'].each { m ->
     include "markets:${m}"
 }
 
